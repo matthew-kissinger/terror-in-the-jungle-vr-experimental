@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(dir:*)",
+      "Bash(npm update)",
+      "Bash(npm outdated)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run build:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
