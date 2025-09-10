@@ -49,6 +49,7 @@ export interface PlayerState {
 
 export interface EnemyState {
   id: string;
+  type: 'imp' | 'attacker';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   wanderTarget: THREE.Vector3;

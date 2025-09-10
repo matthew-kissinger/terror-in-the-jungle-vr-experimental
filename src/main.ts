@@ -10,6 +10,7 @@ import { PlayerController } from './systems/PlayerController';
 import { EnemyAI } from './systems/EnemyAI';
 import { Skybox } from './systems/Skybox';
 import { ChunkManager } from './systems/ChunkManager';
+import { GlobalBillboardSystem } from './systems/GlobalBillboardSystem';
 import { PixelPerfectUtils } from './utils/PixelPerfect';
 import { GameSystem } from './types';
 
@@ -24,6 +25,7 @@ class PixelArtSandbox {
   private terrain!: Terrain;
   private chunkManager!: ChunkManager;
   private billboardSystem!: BillboardSystem;
+  private globalBillboardSystem!: GlobalBillboardSystem;
   private worldGenerator!: WorldGenerator;
   private playerController!: PlayerController;
   private enemyAI!: EnemyAI;
@@ -105,27 +107,28 @@ class PixelArtSandbox {
     try {
       console.log('🔧 Initializing game systems...');
 
-      // Initialize core systems - BACK TO ORIGINAL WORKING SYSTEM
+      // Initialize core systems with global billboard system
       this.assetLoader = new AssetLoader();
+      this.globalBillboardSystem = new GlobalBillboardSystem(this.scene, this.camera, this.assetLoader);
+      this.chunkManager = new ChunkManager(this.scene, this.camera, this.assetLoader, this.globalBillboardSystem);
+      
+      // Keep original systems for fallback compatibility
       this.terrain = new Terrain(this.scene);
       this.billboardSystem = new BillboardSystem(this.scene, this.camera);
       this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain);
       this.playerController = new PlayerController(this.camera, this.terrain);
       this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain);
       this.skybox = new Skybox(this.scene);
+      
+      // Connect player controller with chunk manager
+      this.playerController.setChunkManager(this.chunkManager);
 
-      // DISABLE chunk manager temporarily to get billboards working
-      // this.chunkManager = new ChunkManager(this.scene, this.camera, this.assetLoader);
-      // this.playerController.setChunkManager(this.chunkManager);
-
-      // Add systems to update list - ORIGINAL WORKING ORDER
+      // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
         this.assetLoader,
-        this.terrain,
-        this.billboardSystem,
-        this.worldGenerator,
+        this.globalBillboardSystem,
+        this.chunkManager,
         this.playerController,
-        this.enemyAI,
         this.skybox
       ];
 
@@ -137,8 +140,15 @@ class PixelArtSandbox {
       console.log('🎯 Systems initialized, loading assets...');
       await this.loadGameAssets();
 
-      console.log('🌍 Building world...');
-      await this.buildWorld();
+      // Create skybox for the world
+      const skyboxTexture = this.assetLoader.getTexture('skybox');
+      if (skyboxTexture) {
+        this.skybox.createSkybox(skyboxTexture);
+        console.log('☁️ Skybox created');
+      }
+
+      // Skip old world building - chunks will generate dynamically
+      console.log('🌍 World system ready for dynamic chunk loading...');
 
       this.isInitialized = true;
       console.log('🚀 Pixel Art Sandbox ready!');
@@ -179,8 +189,9 @@ class PixelArtSandbox {
 
     // Spawn enemies
     const impTexture = this.assetLoader.getTexture('imp')!;
+    const attackerTexture = this.assetLoader.getTexture('attacker')!;
     const enemySpawns = this.worldGenerator.generateEnemySpawns();
-    this.enemyAI.initializeEnemies(impTexture, enemySpawns);
+    this.enemyAI.initializeEnemies(impTexture, attackerTexture, enemySpawns);
 
     // Create skybox
     const skyboxTexture = this.assetLoader.getTexture('skybox')!;
@@ -196,24 +207,28 @@ class PixelArtSandbox {
   }
 
   private togglePerformanceStats(): void {
+    const debugInfo = this.globalBillboardSystem.getDebugInfo();
     console.log('📊 Performance Stats:');
     console.log(`FPS: ${Math.round(1 / this.clock.getDelta())}`);
     console.log(`Draw calls: ${this.renderer.info.render.calls}`);
     console.log(`Triangles: ${this.renderer.info.render.triangles}`);
-    console.log(`Grass instances: ${this.billboardSystem.getInstanceCount('grass')}`);
-    console.log(`Tree instances: ${this.billboardSystem.getInstanceCount('tree')}`);
-    console.log(`Enemy count: ${this.enemyAI.getEnemyCount()}`);
+    console.log(`Grass instances: ${debugInfo.grassUsed}/${this.globalBillboardSystem.getInstanceCount('grass')}`);
+    console.log(`Tree instances: ${debugInfo.treeUsed}/${this.globalBillboardSystem.getInstanceCount('tree')}`);
+    console.log(`Chunks loaded: ${this.chunkManager.getLoadedChunkCount()}`);
+    console.log(`Chunks tracked: ${debugInfo.chunksTracked}`);
   }
 
   private showWelcomeMessage(): void {
+    const debugInfo = this.globalBillboardSystem.getDebugInfo();
     console.log(`
 🎮 PIXEL ART SANDBOX ENGINE READY!
 
 🌍 World Features:
-- ${this.billboardSystem.getInstanceCount('grass')} grass clumps
-- ${this.billboardSystem.getInstanceCount('tree')} trees  
-- ${this.enemyAI.getEnemyCount()} wandering imps
-- Tiled forest floor terrain
+- ${debugInfo.grassUsed} grass instances allocated
+- ${debugInfo.treeUsed} tree instances allocated
+- ${debugInfo.chunksTracked} chunks tracked
+- Global billboard system with centralized camera tracking
+- Dynamic chunk loading system
 - Equirectangular skybox
 
 🎯 Controls:
@@ -226,8 +241,9 @@ class PixelArtSandbox {
 🔧 Developer Features:
 - Auto-asset discovery from /assets/
 - Pixel-perfect rendering
-- Instanced billboard system
-- Procedural world generation
+- Global billboard system (100K+ instances)
+- Dynamic chunk loading/unloading
+- Centralized camera tracking
 - Modular architecture
 
 Drop new PNG files in public/assets/ and they'll be auto-discovered!

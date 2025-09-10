@@ -46,6 +46,11 @@ export class PlayerController implements GameSystem {
   update(deltaTime: number): void {
     this.updateMovement(deltaTime);
     this.updateCamera();
+    
+    // Update chunk manager with player position
+    if (this.chunkManager) {
+      this.chunkManager.updatePlayerPosition(this.playerState.position);
+    }
   }
 
   dispose(): void {
@@ -182,14 +187,20 @@ export class PlayerController implements GameSystem {
     const movement = this.playerState.velocity.clone().multiplyScalar(deltaTime);
     const newPosition = this.playerState.position.clone().add(movement);
 
-    // Clamp to terrain bounds - BACK TO ORIGINAL
-    const terrainSize = this.terrain.getSize();
-    const halfSize = terrainSize / 2 - 5; // 5 unit border
-    newPosition.x = MathUtils.clamp(newPosition.x, -halfSize, halfSize);
-    newPosition.z = MathUtils.clamp(newPosition.z, -halfSize, halfSize);
+    // No bounds clamping for infinite world
+    // Remove the old terrain bounds limitation
 
-    // Check ground collision and handle landing
-    const groundHeight = this.terrain.getHeightAt(newPosition.x, newPosition.z) + 2; // Player height
+    // Check ground collision using ChunkManager if available, otherwise use flat terrain
+    let groundHeight = 2; // Default player height above ground
+    
+    if (this.chunkManager) {
+      // Use chunk-based terrain height
+      const terrainHeight = this.chunkManager.getHeightAt(newPosition.x, newPosition.z);
+      groundHeight = terrainHeight + 2; // Player height above terrain
+    } else {
+      // Fallback to flat terrain for compatibility
+      groundHeight = this.terrain.getHeightAt(newPosition.x, newPosition.z) + 2;
+    }
     
     if (newPosition.y <= groundHeight) {
       // Player is on or below ground
@@ -252,5 +263,9 @@ Escape - Release pointer lock
   teleport(position: THREE.Vector3): void {
     this.playerState.position.copy(position);
     this.playerState.velocity.set(0, 0, 0);
+  }
+
+  setChunkManager(chunkManager: ChunkManager): void {
+    this.chunkManager = chunkManager;
   }
 }

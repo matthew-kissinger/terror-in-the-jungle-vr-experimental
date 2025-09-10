@@ -16,7 +16,7 @@ export class WorldGenerator implements GameSystem {
       terrainSize: 200,
       grassDensity: 0.25, // Even more grass
       treeDensity: 0.05, // Much more trees for a proper forest
-      enemyCount: 25
+      enemyCount: 10 // 5 imps + 5 attackers
     }
   ) {
     this.billboardSystem = billboardSystem;
@@ -120,7 +120,7 @@ export class WorldGenerator implements GameSystem {
       const point = treePoints[i];
       const position = new THREE.Vector3(
         point.x - halfSize,
-        this.terrain.getHeightAt(point.x - halfSize, point.y - halfSize) + 3, // Elevate trees above ground
+        this.terrain.getHeightAt(point.x - halfSize, point.y - halfSize) + 2.5, // Trees sit properly on ground
         point.y - halfSize
       );
       

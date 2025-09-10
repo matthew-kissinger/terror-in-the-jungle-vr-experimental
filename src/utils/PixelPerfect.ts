@@ -6,8 +6,9 @@ export class PixelPerfectUtils {
     texture.minFilter = THREE.NearestFilter;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.flipY = true; // Restore flipY for proper orientation
+    texture.flipY = true; // Ensure proper billboard orientation
     texture.generateMipmaps = false;
+    texture.needsUpdate = true; // Force texture update
     return texture;
   }
 

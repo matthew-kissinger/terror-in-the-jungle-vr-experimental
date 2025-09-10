@@ -8,7 +8,8 @@ export class EnemyAI implements GameSystem {
   private enemies: Map<string, EnemyState> = new Map();
   private billboardSystem: BillboardSystem;
   private terrain: Terrain;
-  private enemyTexture?: THREE.Texture;
+  private impTexture?: THREE.Texture;
+  private attackerTexture?: THREE.Texture;
 
   constructor(billboardSystem: BillboardSystem, terrain: Terrain) {
     this.billboardSystem = billboardSystem;
@@ -27,27 +28,41 @@ export class EnemyAI implements GameSystem {
     this.enemies.clear();
   }
 
-  initializeEnemies(enemyTexture: THREE.Texture, spawnPoints: THREE.Vector3[]): void {
-    this.enemyTexture = enemyTexture;
+  initializeEnemies(impTexture: THREE.Texture, attackerTexture: THREE.Texture, spawnPoints: THREE.Vector3[]): void {
+    this.impTexture = impTexture;
+    this.attackerTexture = attackerTexture;
     
     console.log(`👹 ENEMY INITIALIZATION DEBUG:`);
-    console.log(`- Enemy texture:`, enemyTexture);
+    console.log(`- Imp texture:`, impTexture);
+    console.log(`- Attacker texture:`, attackerTexture);
     console.log(`- Spawn points received: ${spawnPoints.length}`);
     
-    // Create billboard type for enemies
-    this.billboardSystem.createBillboardType('imp', enemyTexture, spawnPoints.length, 1.5, 2);
+    // Create billboard types for both enemy types
+    // Split spawn points equally: first half imps, second half attackers
+    const halfCount = Math.floor(spawnPoints.length / 2);
+    const impCount = halfCount;
+    const attackerCount = spawnPoints.length - halfCount;
+    
+    this.billboardSystem.createBillboardType('imp', impTexture, impCount, 1.5, 2);
+    this.billboardSystem.createBillboardType('attacker', attackerTexture, attackerCount, 1.5, 2);
 
-    console.log(`Initializing ${spawnPoints.length} enemies...`);
+    console.log(`Initializing ${impCount} imps and ${attackerCount} attackers...`);
 
     let successfullyAdded = 0;
+    let impIndex = 0;
+    let attackerIndex = 0;
+    
     // Create enemy instances
     spawnPoints.forEach((spawnPoint, index) => {
-      const enemyId = `enemy_${index}`;
+      const isImp = index < impCount;
+      const enemyType: 'imp' | 'attacker' = isImp ? 'imp' : 'attacker';
+      const enemyId = `${enemyType}_${isImp ? impIndex : attackerIndex}`;
       
-      console.log(`Creating enemy ${index} at position:`, spawnPoint);
+      console.log(`Creating ${enemyType} ${index} at position:`, spawnPoint);
       
       const enemyState: EnemyState = {
         id: enemyId,
+        type: enemyType,
         position: spawnPoint.clone(),
         velocity: new THREE.Vector3(),
         wanderTarget: this.generateWanderTarget(spawnPoint),
@@ -69,24 +84,39 @@ export class EnemyAI implements GameSystem {
         velocity: enemyState.velocity
       };
 
-      const index_result = this.billboardSystem.addInstance('imp', billboardInstance);
+      const billboardIndex = isImp ? impIndex : attackerIndex;
+      const index_result = this.billboardSystem.addInstance(enemyType, billboardInstance);
       if (index_result >= 0) successfullyAdded++;
-      console.log(`Enemy ${index} added to billboard system with index: ${index_result}`);
+      console.log(`${enemyType} ${index} added to billboard system with index: ${index_result}`);
+      
+      if (isImp) {
+        impIndex++;
+      } else {
+        attackerIndex++;
+      }
     });
 
     console.log(`✅ Initialized ${this.enemies.size} enemy states`);
     console.log(`✅ Added ${successfullyAdded} enemies to billboard system`);
     console.log(`Final imp count: ${this.billboardSystem.getInstanceCount('imp')}`);
+    console.log(`Final attacker count: ${this.billboardSystem.getInstanceCount('attacker')}`);
   }
 
   private updateEnemies(deltaTime: number): void {
-    let enemyIndex = 0;
+    let impIndex = 0;
+    let attackerIndex = 0;
     
     this.enemies.forEach((enemy) => {
       this.updateEnemyBehavior(enemy, deltaTime);
       this.updateEnemyMovement(enemy, deltaTime);
-      this.updateBillboardPosition(enemy, enemyIndex);
-      enemyIndex++;
+      
+      if (enemy.type === 'imp') {
+        this.updateBillboardPosition(enemy, impIndex, 'imp');
+        impIndex++;
+      } else {
+        this.updateBillboardPosition(enemy, attackerIndex, 'attacker');
+        attackerIndex++;
+      }
     });
   }
 
@@ -140,12 +170,12 @@ export class EnemyAI implements GameSystem {
     enemy.position.copy(newPosition);
   }
 
-  private updateBillboardPosition(enemy: EnemyState, index: number): void {
-    const billboardInstance = this.billboardSystem.getInstance('imp', index);
+  private updateBillboardPosition(enemy: EnemyState, index: number, enemyType: 'imp' | 'attacker'): void {
+    const billboardInstance = this.billboardSystem.getInstance(enemyType, index);
     if (billboardInstance) {
       billboardInstance.position.copy(enemy.position);
       billboardInstance.velocity = enemy.velocity;
-      this.billboardSystem.updateInstance('imp', index, billboardInstance);
+      this.billboardSystem.updateInstance(enemyType, index, billboardInstance);
     }
   }
 

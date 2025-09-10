@@ -3,6 +3,7 @@ import { GameSystem } from '../types';
 import { Chunk } from './Chunk';
 import { NoiseGenerator } from '../utils/NoiseGenerator';
 import { AssetLoader } from './AssetLoader';
+import { GlobalBillboardSystem } from './GlobalBillboardSystem';
 
 export interface ChunkConfig {
   size: number;           // Size of each chunk (64x64 units)
@@ -17,6 +18,7 @@ export class ChunkManager implements GameSystem {
   private assetLoader: AssetLoader;
   private config: ChunkConfig;
   private noiseGenerator: NoiseGenerator;
+  private globalBillboardSystem: GlobalBillboardSystem;
   
   // Chunk storage
   private chunks: Map<string, Chunk> = new Map();
@@ -34,6 +36,7 @@ export class ChunkManager implements GameSystem {
     scene: THREE.Scene, 
     camera: THREE.PerspectiveCamera,
     assetLoader: AssetLoader,
+    globalBillboardSystem: GlobalBillboardSystem,
     config: ChunkConfig = {
       size: 64,
       renderDistance: 3,  // 3x3 = 9 chunks visible (much better performance)
@@ -44,6 +47,7 @@ export class ChunkManager implements GameSystem {
     this.scene = scene;
     this.camera = camera;
     this.assetLoader = assetLoader;
+    this.globalBillboardSystem = globalBillboardSystem;
     this.config = config;
     this.noiseGenerator = new NoiseGenerator(12345); // Fixed seed for consistency
   }
@@ -152,7 +156,8 @@ export class ChunkManager implements GameSystem {
         chunkX,
         chunkZ,
         this.config.size,
-        this.noiseGenerator
+        this.noiseGenerator,
+        this.globalBillboardSystem
       );
 
       await chunk.generate();
@@ -169,6 +174,9 @@ export class ChunkManager implements GameSystem {
   private unloadChunk(chunkKey: string): void {
     const chunk = this.chunks.get(chunkKey);
     if (chunk) {
+      // Remove billboard instances from global system
+      this.globalBillboardSystem.removeChunkInstances(chunkKey);
+      
       chunk.dispose();
       this.chunks.delete(chunkKey);
       console.log(`🗑️ Unloaded chunk ${chunkKey}`);
@@ -184,10 +192,8 @@ export class ChunkManager implements GameSystem {
       chunk.setVisible(distance <= this.config.renderDistance);
       chunk.setLODLevel(lodLevel);
       
-      // Update billboards to face camera
-      if (distance <= this.config.renderDistance) {
-        chunk.updateBillboards(this.playerPosition);
-      }
+      // Billboard updates are now handled by the global system
+      // No need for per-chunk billboard updates
     });
   }
 

@@ -28,6 +28,7 @@ export class AssetLoader implements GameSystem {
       'tree.png', 
       'grass.png',
       'imp.png',
+      'attacker.png',
       'skybox.png'
     ];
 
@@ -55,7 +56,7 @@ export class AssetLoader implements GameSystem {
     if (name.includes('tree') || name.includes('grass')) {
       return AssetCategory.FOLIAGE;
     }
-    if (name.includes('imp') || name.includes('enemy')) {
+    if (name.includes('imp') || name.includes('enemy') || name.includes('attacker')) {
       return AssetCategory.ENEMY;
     }
     if (name.includes('skybox') || name.includes('sky')) {
@@ -75,7 +76,7 @@ export class AssetLoader implements GameSystem {
         texture.minFilter = THREE.NearestFilter;
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.flipY = false; // Standard for web images
+        // Note: flipY will be handled by PixelPerfectUtils.configureTexture()
         
         asset.texture = texture;
         this.loadedTextures.set(asset.name, texture);
