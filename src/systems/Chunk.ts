@@ -554,10 +554,10 @@ export class Chunk {
       const height = this.sampleHeight(point.x, point.y);
       
       const instance: BillboardInstance = {
-        position: new THREE.Vector3(worldX, height + 0.5, worldZ),
+        position: new THREE.Vector3(worldX, height + 0.2, worldZ), // Slightly above ground
         scale: new THREE.Vector3(
-          MathUtils.randomInRange(0.3, 0.8),
-          MathUtils.randomInRange(0.3, 0.8),
+          MathUtils.randomInRange(1.0, 1.8), // Bigger mushrooms
+          MathUtils.randomInRange(1.0, 1.8),
           1
         ),
         rotation: 0
@@ -610,7 +610,7 @@ export class Chunk {
         const height = this.sampleHeight(localX, localZ);
         
         const instance: BillboardInstance = {
-          position: new THREE.Vector3(worldX, height + 2, worldZ),
+          position: new THREE.Vector3(worldX, height + 0.5, worldZ), // Lower into ground
           scale: new THREE.Vector3(
             MathUtils.randomInRange(0.8, 1.2),
             MathUtils.randomInRange(1.0, 1.5),

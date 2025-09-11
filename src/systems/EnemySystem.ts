@@ -44,9 +44,10 @@ export class EnemySystem implements GameSystem {
   private packs: Map<string, string[]> = new Map();  // packId -> enemyIds
   
   // Spawn settings
-  private readonly MAX_ENEMIES = 30;
-  private readonly SPAWN_RADIUS = 40;
+  private readonly MAX_ENEMIES = 50; // Increased to match instance capacity
+  private readonly SPAWN_RADIUS = 60;  // Increased spawn radius
   private readonly MIN_SPAWN_DISTANCE = 20;
+  private readonly DESPAWN_DISTANCE = 120;  // Much larger despawn distance
   private readonly WANDER_RADIUS = 40;
   
   // Speed settings by type
@@ -110,7 +111,7 @@ export class EnemySystem implements GameSystem {
         depthWrite: true
       });
       
-      this.zombieMesh = new THREE.InstancedMesh(zombieGeometry, zombieMaterial, 15);
+      this.zombieMesh = new THREE.InstancedMesh(zombieGeometry, zombieMaterial, 50); // Increased capacity
       this.zombieMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.zombieMesh.frustumCulled = false;
       this.zombieMesh.count = 0;
@@ -129,7 +130,7 @@ export class EnemySystem implements GameSystem {
         depthWrite: true
       });
       
-      this.goblinMesh = new THREE.InstancedMesh(goblinGeometry, goblinMaterial, 10);
+      this.goblinMesh = new THREE.InstancedMesh(goblinGeometry, goblinMaterial, 30); // Increased capacity
       this.goblinMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.goblinMesh.frustumCulled = false;
       this.goblinMesh.count = 0;
@@ -148,7 +149,7 @@ export class EnemySystem implements GameSystem {
         depthWrite: true
       });
       
-      this.impMesh = new THREE.InstancedMesh(impGeometry, impMaterial, 10);
+      this.impMesh = new THREE.InstancedMesh(impGeometry, impMaterial, 30); // Increased capacity
       this.impMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.impMesh.frustumCulled = false;
       this.impMesh.count = 0;
@@ -247,7 +248,7 @@ export class EnemySystem implements GameSystem {
     const toRemove: string[] = [];
     this.enemies.forEach((enemy, id) => {
       const distance = enemy.position.distanceTo(this.playerPosition);
-      if (distance > this.WANDER_RADIUS * 2) {
+      if (distance > this.DESPAWN_DISTANCE) {  // Use much larger despawn distance
         toRemove.push(id);
       }
     });
@@ -481,6 +482,7 @@ export class EnemySystem implements GameSystem {
     let zombieIndex = 0;
     let goblinIndex = 0;
     let impIndex = 0;
+    let skippedZombies = 0;
     
     this.enemies.forEach(enemy => {
       // Calculate rotation to face camera
@@ -498,14 +500,18 @@ export class EnemySystem implements GameSystem {
       dummy.updateMatrix();
       
       if (enemy.type === 'zombie' && this.zombieMesh) {
-        this.zombieMesh.setMatrixAt(zombieIndex, dummy.matrix);
-        enemy.billboardIndex = zombieIndex;
-        zombieIndex++;
-      } else if (enemy.type === 'goblin' && this.goblinMesh) {
+        if (zombieIndex < 50) {
+          this.zombieMesh.setMatrixAt(zombieIndex, dummy.matrix);
+          enemy.billboardIndex = zombieIndex;
+          zombieIndex++;
+        } else {
+          skippedZombies++;
+        }
+      } else if (enemy.type === 'goblin' && this.goblinMesh && goblinIndex < 30) { // Check capacity
         this.goblinMesh.setMatrixAt(goblinIndex, dummy.matrix);
         enemy.billboardIndex = goblinIndex;
         goblinIndex++;
-      } else if (enemy.type === 'imp' && this.impMesh) {
+      } else if (enemy.type === 'imp' && this.impMesh && impIndex < 30) { // Check capacity
         this.impMesh.setMatrixAt(impIndex, dummy.matrix);
         enemy.billboardIndex = impIndex;
         impIndex++;
@@ -516,6 +522,9 @@ export class EnemySystem implements GameSystem {
     if (this.zombieMesh) {
       this.zombieMesh.count = zombieIndex;
       this.zombieMesh.instanceMatrix.needsUpdate = true;
+      if (skippedZombies > 0) {
+        console.warn(`⚠️ Skipped rendering ${skippedZombies} zombies (exceeded capacity)`);
+      }
     }
     
     if (this.goblinMesh) {

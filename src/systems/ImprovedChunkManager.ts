@@ -34,7 +34,7 @@ export class ImprovedChunkManager implements GameSystem {
   
   // Performance settings
   private updateTimer = 0;
-  private readonly UPDATE_INTERVAL = 0.5;
+  private readonly UPDATE_INTERVAL = 0.25;  // More frequent updates
   private readonly MAX_CHUNKS_PER_FRAME = 2; // Load 2 chunks per frame for faster loading
   private readonly LOAD_DELAY = 50; // Reduced delay for quicker loading
   private lastLoadTime = 0;
@@ -47,8 +47,8 @@ export class ImprovedChunkManager implements GameSystem {
     globalBillboardSystem: GlobalBillboardSystem,
     config: ChunkConfig = {
       size: 64,
-      renderDistance: 5,  // Render 5x5 chunks (25 total) for better visibility
-      loadDistance: 7,    // Load 7x7 chunks (49 total) for smoother transitions
+      renderDistance: 8,  // Increased render distance to prevent pop-in
+      loadDistance: 10,   // Load more chunks to prevent unloading visible areas
       lodLevels: 4        // More LOD levels for gradual quality reduction
     }
   ) {
@@ -245,7 +245,8 @@ export class ImprovedChunkManager implements GameSystem {
       const [x, z] = key.split(',').map(Number);
       const distance = this.getChunkDistanceFromPlayer(x, z);
       
-      if (distance > this.config.loadDistance) {
+      // Add buffer to prevent unloading visible chunks
+      if (distance > this.config.loadDistance + 2) {
         chunksToUnload.push(key);
       }
     });
@@ -264,7 +265,8 @@ export class ImprovedChunkManager implements GameSystem {
   private updateChunkVisibility(): void {
     this.chunks.forEach((chunk) => {
       const distance = this.getChunkDistance(chunk.getPosition(), this.playerPosition);
-      const isVisible = distance <= this.config.renderDistance;
+      // Keep chunks visible with a buffer to prevent pop-in
+      const isVisible = distance <= this.config.renderDistance + 1;
       const lodLevel = this.calculateLOD(distance);
       
       chunk.setVisible(isVisible);

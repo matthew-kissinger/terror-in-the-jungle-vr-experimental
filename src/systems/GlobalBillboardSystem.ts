@@ -56,7 +56,7 @@ export class GlobalBillboardSystem implements GameSystem {
   
   // Performance optimization
   private lastCameraPosition = new THREE.Vector3();
-  private readonly updateThreshold = 0.5; // Only update if camera moved this distance
+  private readonly updateThreshold = 0.1; // Lower threshold for smoother updates
 
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -138,7 +138,7 @@ export class GlobalBillboardSystem implements GameSystem {
       return;
     }
 
-    const geometry = new THREE.PlaneGeometry(1, 1);
+    const geometry = new THREE.PlaneGeometry(2, 2); // Bigger mushroom sprites
     const material = PixelPerfectUtils.createPixelPerfectMaterial(mushroomTexture, true);
     
     this.mushroomInstances = new THREE.InstancedMesh(geometry, material, this.maxMushroomInstances);
@@ -526,17 +526,10 @@ export class GlobalBillboardSystem implements GameSystem {
   }
 
   private updateAllBillboards(cameraPosition: THREE.Vector3): void {
-    // Get camera frustum for culling
-    const frustum = new THREE.Frustum();
-    const cameraMatrix = new THREE.Matrix4().multiplyMatrices(
-      this.camera.projectionMatrix,
-      this.camera.matrixWorldInverse
-    );
-    frustum.setFromProjectionMatrix(cameraMatrix);
-    
-    // Update only visible chunk instances
+    // Update all chunk instances without frustum culling for now
+    // (frustum culling is causing disappearing objects)
     this.chunkInstances.forEach((chunkData, chunkKey) => {
-      // Parse chunk position for frustum check
+      // Parse chunk position for distance check
       const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
       const chunkCenter = new THREE.Vector3(
         chunkX * 64 + 32, // Assuming chunk size 64
@@ -544,10 +537,10 @@ export class GlobalBillboardSystem implements GameSystem {
         chunkZ * 64 + 32
       );
       
-      // Check if chunk is in frustum (with some padding)
-      const chunkSphere = new THREE.Sphere(chunkCenter, 100); // Radius covers chunk + tall objects
-      if (!frustum.intersectsSphere(chunkSphere)) {
-        return; // Skip chunks outside frustum
+      // Only skip very distant chunks
+      const distanceToCamera = chunkCenter.distanceTo(cameraPosition);
+      if (distanceToCamera > 800) {
+        return; // Skip only very distant chunks
       }
       
       // Update all vegetation types
@@ -626,22 +619,14 @@ export class GlobalBillboardSystem implements GameSystem {
     
     if (!instanceMesh) return;
     
-    // Create frustum for per-instance culling (optional, for very dense scenes)
-    const frustum = new THREE.Frustum();
-    const cameraMatrix = new THREE.Matrix4().multiplyMatrices(
-      this.camera.projectionMatrix,
-      this.camera.matrixWorldInverse
-    );
-    frustum.setFromProjectionMatrix(cameraMatrix);
-    
     for (let i = 0; i < allocation.count; i++) {
       const instance = allocation.instances[i];
       const matrixIndex = allocation.start + i;
       
-      // Optional: Per-instance frustum culling for very dense scenes
-      const instanceSphere = new THREE.Sphere(instance.position, 10);
-      if (!frustum.intersectsSphere(instanceSphere)) {
-        continue; // Skip instances outside frustum
+      // Only cull by distance, not frustum (to prevent popping)
+      const distanceToCamera = instance.position.distanceTo(cameraPosition);
+      if (distanceToCamera > 500) {
+        continue; // Skip very distant instances
       }
       
       // Calculate rotation to face camera (Y-axis only for vertical billboards)
