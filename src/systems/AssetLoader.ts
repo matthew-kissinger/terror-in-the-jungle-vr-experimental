@@ -29,6 +29,7 @@ export class AssetLoader implements GameSystem {
       'grass.png',
       'imp.png',
       'attacker.png',
+      'mushroom.png',
       'skybox.png'
     ];
 

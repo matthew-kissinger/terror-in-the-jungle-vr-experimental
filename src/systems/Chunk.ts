@@ -65,23 +65,31 @@ export class Chunk {
     if (this.isGenerated) return;
 
     try {
-      // Generate terrain heightmap
+      // STEP 1: Generate and display terrain FIRST
       this.generateHeightData();
-      
-      // Create terrain mesh
       await this.createTerrainMesh();
       
-      // Generate vegetation
-      await this.generateVegetation();
-      
-      // Register instances with global billboard system
-      this.addInstancesToGlobalSystem();
-      
-      // Generate enemies (sparse)
-      await this.generateEnemies();
-      
+      // Mark terrain as ready
       this.isGenerated = true;
-      console.log(`🌍 Generated chunk (${this.chunkX}, ${this.chunkZ})`);
+      console.log(`🌍 Generated chunk terrain (${this.chunkX}, ${this.chunkZ})`);
+      
+      // STEP 2: Add vegetation after a small delay so terrain renders first
+      setTimeout(async () => {
+        try {
+          // Generate vegetation
+          await this.generateVegetation();
+          
+          // Register instances with global billboard system
+          this.addInstancesToGlobalSystem();
+          
+          // Generate enemies (sparse)
+          await this.generateEnemies();
+          
+          console.log(`🌳 Added vegetation to chunk (${this.chunkX}, ${this.chunkZ})`);
+        } catch (error) {
+          console.error(`Failed to add vegetation to chunk (${this.chunkX}, ${this.chunkZ}):`, error);
+        }
+      }, 100); // 100ms delay ensures terrain is visible first
       
     } catch (error) {
       console.error(`❌ Failed to generate chunk (${this.chunkX}, ${this.chunkZ}):`, error);
@@ -102,11 +110,18 @@ export class Chunk {
         const worldX = baseX + (x / resolution) * this.size;
         const worldZ = baseZ + (z / resolution) * this.size;
         
-        // Multi-octave noise for varied terrain
+        // More mountainous terrain with higher peaks
         let height = 0;
-        height += this.noiseGenerator.noise(worldX * 0.01, worldZ * 0.01) * 20;  // Large features
-        height += this.noiseGenerator.noise(worldX * 0.05, worldZ * 0.05) * 5;   // Medium features
-        height += this.noiseGenerator.noise(worldX * 0.1, worldZ * 0.1) * 1;     // Small details
+        height += this.noiseGenerator.noise(worldX * 0.003, worldZ * 0.003) * 80;  // Mountain ranges
+        height += this.noiseGenerator.noise(worldX * 0.01, worldZ * 0.01) * 40;    // Large hills
+        height += this.noiseGenerator.noise(worldX * 0.05, worldZ * 0.05) * 10;    // Medium features
+        height += this.noiseGenerator.noise(worldX * 0.1, worldZ * 0.1) * 2;       // Small details
+        
+        // Add some cliff-like features
+        const cliff = Math.abs(this.noiseGenerator.noise(worldX * 0.02, worldZ * 0.02));
+        if (cliff > 0.7) {
+          height += cliff * 50; // Sharp elevation changes
+        }
         
         // Store in row-major order to match PlaneGeometry
         const index = z * (resolution + 1) + x;
@@ -253,10 +268,10 @@ export class Chunk {
       const height = this.sampleHeight(point.x, point.y);
       
       const instance: BillboardInstance = {
-        position: new THREE.Vector3(worldX, height + 2.5, worldZ),
+        position: new THREE.Vector3(worldX, height + 12, worldZ), // Raised for bigger trees
         scale: new THREE.Vector3(
-          MathUtils.randomInRange(0.8, 1.5),
-          MathUtils.randomInRange(0.9, 1.8),
+          MathUtils.randomInRange(1.5, 2.5), // Bigger trees
+          MathUtils.randomInRange(1.5, 2.5),
           1
         ),
         rotation: 0 // Will be updated by global billboard system

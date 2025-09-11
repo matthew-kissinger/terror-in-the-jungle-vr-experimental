@@ -86,8 +86,8 @@ export class GlobalBillboardSystem implements GameSystem {
       return;
     }
 
-    // Create geometry and material
-    const geometry = new THREE.PlaneGeometry(4, 6);
+    // Create geometry and material - BIGGER TREES
+    const geometry = new THREE.PlaneGeometry(12, 18); // 3x bigger trees
     const material = PixelPerfectUtils.createPixelPerfectMaterial(treeTexture, true);
     
     // Create the global instanced mesh
@@ -277,8 +277,30 @@ export class GlobalBillboardSystem implements GameSystem {
   }
 
   private updateAllBillboards(cameraPosition: THREE.Vector3): void {
-    // Update all chunk instances to face the camera
+    // Get camera frustum for culling
+    const frustum = new THREE.Frustum();
+    const cameraMatrix = new THREE.Matrix4().multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse
+    );
+    frustum.setFromProjectionMatrix(cameraMatrix);
+    
+    // Update only visible chunk instances
     this.chunkInstances.forEach((chunkData, chunkKey) => {
+      // Parse chunk position for frustum check
+      const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
+      const chunkCenter = new THREE.Vector3(
+        chunkX * 64 + 32, // Assuming chunk size 64
+        0,
+        chunkZ * 64 + 32
+      );
+      
+      // Check if chunk is in frustum (with some padding)
+      const chunkSphere = new THREE.Sphere(chunkCenter, 100); // Radius covers chunk + tall objects
+      if (!frustum.intersectsSphere(chunkSphere)) {
+        return; // Skip chunks outside frustum
+      }
+      
       // Update grass instances
       const grassData = chunkData.get('grass');
       if (grassData) {
@@ -305,9 +327,23 @@ export class GlobalBillboardSystem implements GameSystem {
     const instanceMesh = type === 'grass' ? this.grassInstances : this.treeInstances;
     if (!instanceMesh) return;
     
+    // Create frustum for per-instance culling (optional, for very dense scenes)
+    const frustum = new THREE.Frustum();
+    const cameraMatrix = new THREE.Matrix4().multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse
+    );
+    frustum.setFromProjectionMatrix(cameraMatrix);
+    
     for (let i = 0; i < allocation.count; i++) {
       const instance = allocation.instances[i];
       const matrixIndex = allocation.start + i;
+      
+      // Optional: Per-instance frustum culling for very dense scenes
+      const instanceSphere = new THREE.Sphere(instance.position, 10);
+      if (!frustum.intersectsSphere(instanceSphere)) {
+        continue; // Skip instances outside frustum
+      }
       
       // Calculate rotation to face camera (Y-axis only for vertical billboards)
       const direction = new THREE.Vector3()

@@ -8,8 +8,9 @@ import { BillboardSystem } from './systems/Billboard';
 import { WorldGenerator } from './systems/WorldGenerator';
 import { PlayerController } from './systems/PlayerController';
 import { EnemyAI } from './systems/EnemyAI';
+import { EnemySystem } from './systems/EnemySystem';
 import { Skybox } from './systems/Skybox';
-import { ChunkManager } from './systems/ChunkManager';
+import { ImprovedChunkManager } from './systems/ImprovedChunkManager';
 import { GlobalBillboardSystem } from './systems/GlobalBillboardSystem';
 import { PixelPerfectUtils } from './utils/PixelPerfect';
 import { GameSystem } from './types';
@@ -23,12 +24,13 @@ class PixelArtSandbox {
   // Game systems
   private assetLoader!: AssetLoader;
   private terrain!: Terrain;
-  private chunkManager!: ChunkManager;
+  private chunkManager!: ImprovedChunkManager;
   private billboardSystem!: BillboardSystem;
   private globalBillboardSystem!: GlobalBillboardSystem;
   private worldGenerator!: WorldGenerator;
   private playerController!: PlayerController;
   private enemyAI!: EnemyAI;
+  private enemySystem!: EnemySystem;
   private skybox!: Skybox;
 
   // Game state
@@ -110,7 +112,7 @@ class PixelArtSandbox {
       // Initialize core systems with global billboard system
       this.assetLoader = new AssetLoader();
       this.globalBillboardSystem = new GlobalBillboardSystem(this.scene, this.camera, this.assetLoader);
-      this.chunkManager = new ChunkManager(this.scene, this.camera, this.assetLoader, this.globalBillboardSystem);
+      this.chunkManager = new ImprovedChunkManager(this.scene, this.camera, this.assetLoader, this.globalBillboardSystem);
       
       // Keep original systems for fallback compatibility
       this.terrain = new Terrain(this.scene);
@@ -118,10 +120,12 @@ class PixelArtSandbox {
       this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain);
       this.playerController = new PlayerController(this.camera, this.terrain);
       this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain);
+      this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
       
-      // Connect player controller with chunk manager
+      // Connect systems with chunk manager
       this.playerController.setChunkManager(this.chunkManager);
+      this.enemySystem.setChunkManager(this.chunkManager);
 
       // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
@@ -129,6 +133,7 @@ class PixelArtSandbox {
         this.globalBillboardSystem,
         this.chunkManager,
         this.playerController,
+        this.enemySystem,
         this.skybox
       ];
 
@@ -214,7 +219,8 @@ class PixelArtSandbox {
     console.log(`Triangles: ${this.renderer.info.render.triangles}`);
     console.log(`Grass instances: ${debugInfo.grassUsed}/${this.globalBillboardSystem.getInstanceCount('grass')}`);
     console.log(`Tree instances: ${debugInfo.treeUsed}/${this.globalBillboardSystem.getInstanceCount('tree')}`);
-    console.log(`Chunks loaded: ${this.chunkManager.getLoadedChunkCount()}`);
+    console.log(`Enemies: ${this.enemySystem.getEnemyCount()}`);  
+    console.log(`Chunks loaded: ${this.chunkManager.getLoadedChunkCount()}, Queue: ${this.chunkManager.getQueueSize()}, Loading: ${this.chunkManager.getLoadingCount()}`);
     console.log(`Chunks tracked: ${debugInfo.chunksTracked}`);
   }
 
@@ -226,7 +232,8 @@ class PixelArtSandbox {
 🌍 World Features:
 - ${debugInfo.grassUsed} grass instances allocated
 - ${debugInfo.treeUsed} tree instances allocated
-- ${debugInfo.chunksTracked} chunks tracked
+- ${this.chunkManager ? this.chunkManager.getLoadedChunkCount() : 0} chunks loaded
+- ${this.enemySystem ? this.enemySystem.getEnemyCount() : 0} enemies wandering around
 - Global billboard system with centralized camera tracking
 - Dynamic chunk loading system
 - Equirectangular skybox

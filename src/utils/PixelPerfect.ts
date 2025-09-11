@@ -16,8 +16,9 @@ export class PixelPerfectUtils {
     return new THREE.MeshBasicMaterial({
       map: this.configureTexture(texture),
       transparent,
-      alphaTest: transparent ? 0.1 : 0,
-      side: THREE.DoubleSide
+      alphaTest: transparent ? 0.5 : 0,  // Higher alpha test to remove outlines
+      side: THREE.DoubleSide,
+      depthWrite: true  // Ensure proper depth sorting
     });
   }
 

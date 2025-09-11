@@ -36,7 +36,9 @@
       "Bash(/bashes)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(Select-Object Name, Length)",
-      "Bash(Format-Table)"
+      "Bash(Format-Table)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []
