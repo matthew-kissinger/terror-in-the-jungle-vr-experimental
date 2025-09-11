@@ -6,7 +6,7 @@ import { ImprovedChunkManager } from './ImprovedChunkManager';
 
 interface Enemy {
   id: string;
-  type: 'zombie' | 'goblin' | 'imp';
+  type: 'zombie' | 'goblin' | 'imp' | 'ghast';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotation: number;
@@ -22,6 +22,10 @@ interface Enemy {
   moveSpeed: number;
   isChasing: boolean;
   lastKnownPlayerPos?: THREE.Vector3;
+  // Flying properties
+  isFlying?: boolean;
+  targetHeight?: number;
+  floatPhase?: number; // For sinusoidal floating motion
 }
 
 export class EnemySystem implements GameSystem {
@@ -35,6 +39,7 @@ export class EnemySystem implements GameSystem {
   private zombieMesh?: THREE.InstancedMesh;
   private goblinMesh?: THREE.InstancedMesh;
   private impMesh?: THREE.InstancedMesh;
+  private ghastMesh?: THREE.InstancedMesh;
   private nextEnemyId = 0;
   private nextHordeId = 0;
   private nextPackId = 0;
@@ -54,11 +59,13 @@ export class EnemySystem implements GameSystem {
   private readonly ZOMBIE_SPEED = 3;
   private readonly GOBLIN_SPEED = 7;
   private readonly IMP_SPEED = 5;
+  private readonly GHAST_SPEED = 4;
   
   // Detection ranges
   private readonly ZOMBIE_DETECTION = 20;
   private readonly GOBLIN_DETECTION = 30;
   private readonly IMP_DETECTION = 15;
+  private readonly GHAST_DETECTION = 40; // Can see far from the sky
   
   // Player tracking
   private playerPosition = new THREE.Vector3();
@@ -95,8 +102,9 @@ export class EnemySystem implements GameSystem {
     const zombieTexture = this.assetLoader.getTexture('zombie');
     const goblinTexture = this.assetLoader.getTexture('goblin');
     const impTexture = this.assetLoader.getTexture('imp');
+    const ghastTexture = this.assetLoader.getTexture('flying_monster');
     
-    if (!zombieTexture || !goblinTexture || !impTexture) {
+    if (!zombieTexture || !goblinTexture || !impTexture || !ghastTexture) {
       console.warn('⚠️ Some enemy textures not found');
     }
     
@@ -156,6 +164,25 @@ export class EnemySystem implements GameSystem {
       this.impMesh.renderOrder = 1;
       this.scene.add(this.impMesh);
     }
+    
+    // Create ghast (flying monster) billboard type
+    if (ghastTexture) {
+      const ghastGeometry = new THREE.PlaneGeometry(10, 10); // Bigger for flying enemy
+      const ghastMaterial = new THREE.MeshBasicMaterial({
+        map: ghastTexture,
+        transparent: true,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: true
+      });
+      
+      this.ghastMesh = new THREE.InstancedMesh(ghastGeometry, ghastMaterial, 10);
+      this.ghastMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.ghastMesh.frustumCulled = false;
+      this.ghastMesh.count = 0;
+      this.ghastMesh.renderOrder = 2; // Render above other enemies
+      this.scene.add(this.ghastMesh);
+    }
   }
 
   private spawnInitialEnemies(): void {
@@ -175,6 +202,16 @@ export class EnemySystem implements GameSystem {
       const z = Math.sin(angle) * distance;
       const y = this.getTerrainHeight(x, z) + 3;
       this.spawnEnemy(new THREE.Vector3(x, y, z), 'imp');
+    }
+    
+    // Spawn flying ghasts
+    for (let i = 0; i < 2; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 20 + Math.random() * 30;
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      const y = 30 + Math.random() * 20; // High in the sky (30-50 units)
+      this.spawnEnemy(new THREE.Vector3(x, y, z), 'ghast');
     }
     
     console.log('👹 Spawned initial enemy groups');
@@ -268,22 +305,27 @@ export class EnemySystem implements GameSystem {
       
       // Spawn different enemy types with different probabilities
       const rand = Math.random();
-      if (rand < 0.4) {
-        // 40% chance: Spawn zombie horde
+      if (rand < 0.35) {
+        // 35% chance: Spawn zombie horde
         this.spawnZombieHorde(position);
         break; // Only spawn one group at a time
-      } else if (rand < 0.7) {
-        // 30% chance: Spawn goblin pack
+      } else if (rand < 0.6) {
+        // 25% chance: Spawn goblin pack
         this.spawnGoblinPack(position);
         break;
-      } else {
-        // 30% chance: Spawn individual imp
+      } else if (rand < 0.85) {
+        // 25% chance: Spawn individual imp
         this.spawnEnemy(position, 'imp');
+      } else {
+        // 15% chance: Spawn flying ghast high in the sky
+        const ghastY = 30 + Math.random() * 25;
+        position.y = ghastY;
+        this.spawnEnemy(position, 'ghast');
       }
     }
   }
 
-  private spawnEnemy(position: THREE.Vector3, type: 'zombie' | 'goblin' | 'imp', groupData?: { hordeId?: string; packId?: string; packRole?: 'leader' | 'follower' }): string {
+  private spawnEnemy(position: THREE.Vector3, type: 'zombie' | 'goblin' | 'imp' | 'ghast', groupData?: { hordeId?: string; packId?: string; packRole?: 'leader' | 'follower' }): string {
     const id = `enemy_${this.nextEnemyId++}`;
     
     // Set properties based on enemy type
@@ -303,6 +345,10 @@ export class EnemySystem implements GameSystem {
         moveSpeed = this.IMP_SPEED;
         detectionRadius = this.IMP_DETECTION;
         break;
+      case 'ghast':
+        moveSpeed = this.GHAST_SPEED;
+        detectionRadius = this.GHAST_DETECTION;
+        break;
     }
     
     const enemy: Enemy = {
@@ -317,6 +363,9 @@ export class EnemySystem implements GameSystem {
       moveSpeed,
       detectionRadius,
       isChasing: false,
+      isFlying: type === 'ghast',
+      targetHeight: type === 'ghast' ? position.y : undefined,
+      floatPhase: type === 'ghast' ? Math.random() * Math.PI * 2 : undefined,
       ...groupData
     };
     
@@ -346,14 +395,19 @@ export class EnemySystem implements GameSystem {
       case 'imp':
         this.updateImp(enemy, deltaTime);
         break;
+      case 'ghast':
+        this.updateGhast(enemy, deltaTime);
+        break;
     }
     
     // Apply velocity
     enemy.position.add(enemy.velocity.clone().multiplyScalar(deltaTime));
     
-    // Keep enemy on terrain
-    const terrainHeight = this.getTerrainHeight(enemy.position.x, enemy.position.z);
-    enemy.position.y = terrainHeight + 3;
+    // Keep enemy on terrain (unless flying)
+    if (!enemy.isFlying) {
+      const terrainHeight = this.getTerrainHeight(enemy.position.x, enemy.position.z);
+      enemy.position.y = terrainHeight + 3;
+    }
   }
   
   private updateZombie(enemy: Enemy, deltaTime: number): void {
@@ -473,6 +527,64 @@ export class EnemySystem implements GameSystem {
       );
     }
   }
+  
+  private updateGhast(enemy: Enemy, deltaTime: number): void {
+    // Update float phase for sinusoidal motion
+    if (enemy.floatPhase !== undefined) {
+      enemy.floatPhase += deltaTime * 2; // Gentle floating speed
+    }
+    
+    // Ghast-like behavior: slow floating movement with height changes
+    if (enemy.isChasing && enemy.position.distanceTo(this.playerPosition) < enemy.detectionRadius) {
+      // Float towards player but maintain height advantage
+      const toPlayer = new THREE.Vector3()
+        .subVectors(this.playerPosition, enemy.position);
+      
+      // Only move horizontally towards player
+      const horizontalDir = new THREE.Vector3(toPlayer.x, 0, toPlayer.z).normalize();
+      
+      // Try to stay above player
+      const desiredHeight = this.playerPosition.y + 20 + Math.sin(enemy.floatPhase || 0) * 5;
+      const heightDiff = desiredHeight - enemy.position.y;
+      
+      enemy.velocity.set(
+        horizontalDir.x * enemy.moveSpeed * 0.7,
+        heightDiff * 0.5, // Gentle vertical movement
+        horizontalDir.z * enemy.moveSpeed * 0.7
+      );
+    } else {
+      // Wander in 3D space like Minecraft ghasts
+      enemy.timeToDirectionChange -= deltaTime;
+      
+      if (enemy.timeToDirectionChange <= 0) {
+        // Pick new random direction including vertical
+        enemy.wanderAngle = Math.random() * Math.PI * 2;
+        enemy.targetHeight = 25 + Math.random() * 30; // Random height between 25-55
+        enemy.timeToDirectionChange = 3 + Math.random() * 3; // Change direction every 3-6 seconds
+      }
+      
+      // Move towards target position
+      const heightDiff = (enemy.targetHeight || 40) - enemy.position.y;
+      
+      // Add floating bob motion
+      const floatOffset = Math.sin(enemy.floatPhase || 0) * 0.3;
+      
+      enemy.velocity.set(
+        Math.cos(enemy.wanderAngle) * enemy.moveSpeed * 0.5,
+        heightDiff * 0.3 + floatOffset, // Gentle height adjustment with bob
+        Math.sin(enemy.wanderAngle) * enemy.moveSpeed * 0.5
+      );
+    }
+    
+    // Keep ghasts from going too low or too high
+    if (enemy.position.y < 20) {
+      enemy.velocity.y = Math.abs(enemy.velocity.y);
+      enemy.targetHeight = 30 + Math.random() * 20;
+    } else if (enemy.position.y > 60) {
+      enemy.velocity.y = -Math.abs(enemy.velocity.y);
+      enemy.targetHeight = 25 + Math.random() * 15;
+    }
+  }
 
   private updateBillboards(): void {
     const dummy = new THREE.Object3D();
@@ -482,6 +594,7 @@ export class EnemySystem implements GameSystem {
     let zombieIndex = 0;
     let goblinIndex = 0;
     let impIndex = 0;
+    let ghastIndex = 0;
     let skippedZombies = 0;
     
     this.enemies.forEach(enemy => {
@@ -515,6 +628,10 @@ export class EnemySystem implements GameSystem {
         this.impMesh.setMatrixAt(impIndex, dummy.matrix);
         enemy.billboardIndex = impIndex;
         impIndex++;
+      } else if (enemy.type === 'ghast' && this.ghastMesh && ghastIndex < 10) { // Check capacity
+        this.ghastMesh.setMatrixAt(ghastIndex, dummy.matrix);
+        enemy.billboardIndex = ghastIndex;
+        ghastIndex++;
       }
     });
     
@@ -535,6 +652,11 @@ export class EnemySystem implements GameSystem {
     if (this.impMesh) {
       this.impMesh.count = impIndex;
       this.impMesh.instanceMatrix.needsUpdate = true;
+    }
+    
+    if (this.ghastMesh) {
+      this.ghastMesh.count = ghastIndex;
+      this.ghastMesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -561,6 +683,11 @@ export class EnemySystem implements GameSystem {
     if (this.impMesh) {
       this.scene.remove(this.impMesh);
       this.impMesh.dispose();
+    }
+    
+    if (this.ghastMesh) {
+      this.scene.remove(this.ghastMesh);
+      this.ghastMesh.dispose();
     }
     
     this.enemies.clear();

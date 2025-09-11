@@ -35,16 +35,19 @@ export class AssetLoader implements GameSystem {
       'imp.png',
       'zombie.png',
       'goblin.png',
+      'flying_monster.png',
+      'first-person.png',
       'skybox.png',
       'skybox2.png',
       'skybox3.png',
-      'skybox4.png'
+      'skybox4.png',
+      'waternormals.jpg'
     ];
 
     for (const filename of knownAssets) {
       const category = this.categorizeAsset(filename);
       const assetInfo: AssetInfo = {
-        name: filename.replace('.png', ''),
+        name: filename.replace('.png', '').replace('.jpg', ''),
         path: `/assets/${filename}`,
         category
       };

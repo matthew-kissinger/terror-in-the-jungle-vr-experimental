@@ -38,7 +38,8 @@
       "Bash(Select-Object Name, Length)",
       "Bash(Format-Table)",
       "Bash(python:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

@@ -13,6 +13,8 @@ import { Skybox } from './systems/Skybox';
 import { ImprovedChunkManager } from './systems/ImprovedChunkManager';
 import { GlobalBillboardSystem } from './systems/GlobalBillboardSystem';
 import { PixelPerfectUtils } from './utils/PixelPerfect';
+import { WaterSystem } from './systems/WaterSystem';
+import { FirstPersonWeapon } from './systems/FirstPersonWeapon';
 import { GameSystem } from './types';
 
 class PixelArtSandbox {
@@ -32,6 +34,8 @@ class PixelArtSandbox {
   private enemyAI!: EnemyAI;
   private enemySystem!: EnemySystem;
   private skybox!: Skybox;
+  private waterSystem!: WaterSystem;
+  private firstPersonWeapon!: FirstPersonWeapon;
 
   // Game state
   private clock = new THREE.Clock();
@@ -122,17 +126,22 @@ class PixelArtSandbox {
       this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain);
       this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
+      this.waterSystem = new WaterSystem(this.scene, this.assetLoader);
+      this.firstPersonWeapon = new FirstPersonWeapon(this.scene, this.camera, this.assetLoader);
       
       // Connect systems with chunk manager
       this.playerController.setChunkManager(this.chunkManager);
       this.enemySystem.setChunkManager(this.chunkManager);
+      this.firstPersonWeapon.setPlayerController(this.playerController);
 
       // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
         this.assetLoader,
         this.globalBillboardSystem,
         this.chunkManager,
+        this.waterSystem,
         this.playerController,
+        this.firstPersonWeapon,
         this.enemySystem,
         this.skybox
       ];
@@ -275,8 +284,13 @@ Drop new PNG files in public/assets/ and they'll be auto-discovered!
     // Update skybox position to follow camera
     this.skybox.updatePosition(this.camera.position);
 
-    // Render the scene
+    // Render the main scene
     this.renderer.render(this.scene, this.camera);
+    
+    // Render weapon overlay on top
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.renderWeapon(this.renderer);
+    }
   }
 
   public dispose(): void {

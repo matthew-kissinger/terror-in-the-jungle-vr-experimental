@@ -157,13 +157,25 @@ export class Chunk {
         // Add fine details
         height += detailNoise * 8;
         
+        // Create water areas (lakes and rivers)
+        const waterNoise = this.noiseGenerator.noise(worldX * 0.003, worldZ * 0.003);
+        const riverNoise = this.noiseGenerator.noise(worldX * 0.01, worldZ * 0.01);
+        
+        // Create lakes in low-lying areas
+        if (waterNoise < -0.4 && height < 15) {
+          height = -3 - waterNoise * 2; // Below water level (0)
+        }
+        // Create river valleys
+        else if (Math.abs(riverNoise) < 0.1 && height < 25) {
+          height = height * 0.3 - 2; // Carve river channels
+        }
         // Apply smoothing for valleys (lower areas)
-        if (height < 20) {
+        else if (height < 20) {
           height = height * 0.7; // Flatten valley floors
         }
         
-        // Ensure non-negative height
-        height = Math.max(0, height);
+        // Allow negative heights for underwater terrain
+        height = Math.max(-8, height); // Changed from 0 to -8
         
         // Store in row-major order to match PlaneGeometry
         const index = z * (resolution + 1) + x;
@@ -319,6 +331,9 @@ export class Chunk {
       const worldZ = baseZ + localZ;
       // Use proper local coordinates for height sampling
       const height = this.sampleHeight(localX, localZ);
+      
+      // Skip underwater grass
+      if (height < 0.5) continue;
       
       const instance: BillboardInstance = {
         position: new THREE.Vector3(worldX, height, worldZ),
@@ -477,6 +492,9 @@ export class Chunk {
       if (treeType === 'tree1') scaleMultiplier = 1.2; // Pine trees are taller
       if (treeType === 'tree2') scaleMultiplier = 1.1; // Oak trees are wider
       
+      // Skip underwater trees
+      if (height < 0.5) continue;
+      
       const instance: BillboardInstance = {
         position: new THREE.Vector3(worldX, height + 12, worldZ),
         scale: new THREE.Vector3(
@@ -553,6 +571,9 @@ export class Chunk {
       const worldZ = baseZ + point.y;
       const height = this.sampleHeight(point.x, point.y);
       
+      // Skip underwater mushrooms
+      if (height < 0.2) continue;
+      
       const instance: BillboardInstance = {
         position: new THREE.Vector3(worldX, height + 0.2, worldZ), // Slightly above ground
         scale: new THREE.Vector3(
@@ -608,6 +629,9 @@ export class Chunk {
         const worldX = baseX + localX;
         const worldZ = baseZ + localZ;
         const height = this.sampleHeight(localX, localZ);
+        
+        // Skip underwater wheat
+        if (height < 0.5) continue;
         
         const instance: BillboardInstance = {
           position: new THREE.Vector3(worldX, height + 0.5, worldZ), // Lower into ground

@@ -256,6 +256,10 @@ Escape - Release pointer lock
   getVelocity(): THREE.Vector3 {
     return this.playerState.velocity.clone();
   }
+  
+  isMoving(): boolean {
+    return this.playerState.velocity.length() > 0.1;
+  }
 
   isMoving(): boolean {
     return this.playerState.velocity.length() > 0.1;
