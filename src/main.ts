@@ -194,9 +194,8 @@ class PixelArtSandbox {
 
     // Spawn enemies
     const impTexture = this.assetLoader.getTexture('imp')!;
-    const attackerTexture = this.assetLoader.getTexture('attacker')!;
     const enemySpawns = this.worldGenerator.generateEnemySpawns();
-    this.enemyAI.initializeEnemies(impTexture, attackerTexture, enemySpawns);
+    this.enemyAI.initializeEnemies(impTexture, impTexture, enemySpawns); // Using imp texture for both temporarily
 
     // Create skybox
     const skyboxTexture = this.assetLoader.getTexture('skybox')!;

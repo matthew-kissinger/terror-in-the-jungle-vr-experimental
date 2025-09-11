@@ -3,11 +3,12 @@ import { GameSystem, PlayerState } from '../types';
 import { MathUtils } from '../utils/Math';
 import { Terrain } from './Terrain';
 import { ChunkManager } from './ChunkManager';
+import { ImprovedChunkManager } from './ImprovedChunkManager';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
   private terrain: Terrain;
-  private chunkManager?: ChunkManager;
+  private chunkManager?: ChunkManager | ImprovedChunkManager;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -265,7 +266,7 @@ Escape - Release pointer lock
     this.playerState.velocity.set(0, 0, 0);
   }
 
-  setChunkManager(chunkManager: ChunkManager): void {
+  setChunkManager(chunkManager: ChunkManager | ImprovedChunkManager): void {
     this.chunkManager = chunkManager;
   }
 }

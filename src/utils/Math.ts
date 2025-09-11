@@ -104,4 +104,11 @@ export class MathUtils {
   static clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
   }
+
+  static smoothstep(edge0: number, edge1: number, x: number): number {
+    // Scale, bias and saturate x to [0, 1] range
+    x = this.clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    // Evaluate polynomial
+    return x * x * (3 - 2 * x);
+  }
 }

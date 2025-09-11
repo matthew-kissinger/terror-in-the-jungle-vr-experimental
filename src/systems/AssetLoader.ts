@@ -25,12 +25,20 @@ export class AssetLoader implements GameSystem {
     // Known assets in the project root
     const knownAssets = [
       'forestfloor.png',
-      'tree.png', 
+      'tree.png',
+      'tree1.png',
+      'tree2.png', 
+      'tree3.png',
       'grass.png',
-      'imp.png',
-      'attacker.png',
       'mushroom.png',
-      'skybox.png'
+      'wheat.png',
+      'imp.png',
+      'zombie.png',
+      'goblin.png',
+      'skybox.png',
+      'skybox2.png',
+      'skybox3.png',
+      'skybox4.png'
     ];
 
     for (const filename of knownAssets) {
@@ -54,10 +62,10 @@ export class AssetLoader implements GameSystem {
     if (name.includes('floor') || name.includes('ground')) {
       return AssetCategory.GROUND;
     }
-    if (name.includes('tree') || name.includes('grass')) {
+    if (name.includes('tree') || name.includes('grass') || name.includes('mushroom') || name.includes('wheat')) {
       return AssetCategory.FOLIAGE;
     }
-    if (name.includes('imp') || name.includes('enemy') || name.includes('attacker')) {
+    if (name.includes('imp') || name.includes('enemy') || name.includes('zombie') || name.includes('goblin')) {
       return AssetCategory.ENEMY;
     }
     if (name.includes('skybox') || name.includes('sky')) {
