@@ -5,6 +5,7 @@ import { NoiseGenerator } from '../utils/NoiseGenerator';
 import { GlobalBillboardSystem } from './GlobalBillboardSystem';
 import { BillboardInstance } from '../types';
 import { MathUtils } from '../utils/Math';
+import { PixelPerfectUtils } from '../utils/PixelPerfect';
 
 // Extend Three.js BufferGeometry with BVH methods
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -24,8 +25,19 @@ export class ImprovedChunk {
   private terrainMesh?: THREE.Mesh;
   private terrainGeometry?: THREE.BufferGeometry;
   
-  // Billboard instances
+  // Billboard instances - Full jungle layers
   private globalBillboardSystem: GlobalBillboardSystem;
+  // Ground cover
+  private fernInstances: BillboardInstance[] = [];          // Dense everywhere
+  private elephantEarInstances: BillboardInstance[] = [];   // Sprinkled
+  // Mid-level
+  private fanPalmInstances: BillboardInstance[] = [];       // Near water/slopes
+  private coconutInstances: BillboardInstance[] = [];       // Water edges
+  private arecaInstances: BillboardInstance[] = [];         // Everywhere mid
+  // Canopy giants
+  private dipterocarpInstances: BillboardInstance[] = [];   // Rare huge
+  private banyanInstances: BillboardInstance[] = [];        // Rare huge
+  // Legacy compatibility
   private grassInstances: BillboardInstance[] = [];
   private treeInstances: BillboardInstance[] = [];
   
@@ -34,7 +46,7 @@ export class ImprovedChunk {
   private isGenerated = false;
   
   // Debug
-  private debugMode = true;
+  private debugMode = false;
 
   constructor(
     scene: THREE.Scene,
@@ -72,7 +84,18 @@ export class ImprovedChunk {
     
     // Register instances with global system
     const chunkKey = `${this.chunkX},${this.chunkZ}`;
-    this.globalBillboardSystem.addChunkInstances(chunkKey, this.grassInstances, this.treeInstances);
+    this.globalBillboardSystem.addChunkInstances(
+      chunkKey,
+      [], // legacy grass not used; using specific undergrowth types instead
+      [], // legacy trees not used; using jungle tree types instead
+      this.fernInstances,
+      this.elephantEarInstances,
+      this.fanPalmInstances,
+      this.coconutInstances,
+      this.arecaInstances,
+      this.dipterocarpInstances,
+      this.banyanInstances
+    );
     
     this.isGenerated = true;
     console.log(`✅ ImprovedChunk (${this.chunkX}, ${this.chunkZ}) generated`);
@@ -81,22 +104,76 @@ export class ImprovedChunk {
   private generateHeightData(): void {
     const worldOffsetX = this.chunkX * this.size;
     const worldOffsetZ = this.chunkZ * this.size;
+    const resolution = this.segments; // Must match geometry segments
     
-    // Generate height data following Three.js example pattern
-    let index = 0;
-    for (let z = 0; z <= this.segments; z++) {
-      for (let x = 0; x <= this.segments; x++) {
-        // Calculate world position
-        const worldX = worldOffsetX + (x / this.segments) * this.size;
-        const worldZ = worldOffsetZ + (z / this.segments) * this.size;
+    // Generate height data matching legacy terrain mapping (mountains, rivers, lakes)
+    for (let z = 0; z <= resolution; z++) {
+      for (let x = 0; x <= resolution; x++) {
+        const worldX = worldOffsetX + (x / resolution) * this.size;
+        const worldZ = worldOffsetZ + (z / resolution) * this.size;
         
-        // Generate height using noise
+        // Continental/base terrain shape (very low frequency)
+        let continentalHeight = this.noiseGenerator.noise(worldX * 0.001, worldZ * 0.001);
+        
+        // Mountain ridges using ridge noise (inverted absolute value)
+        let ridgeNoise = 1 - Math.abs(this.noiseGenerator.noise(worldX * 0.003, worldZ * 0.003));
+        ridgeNoise = Math.pow(ridgeNoise, 1.5);
+        
+        // Valley carving using erosion-like shaping
+        let valleyNoise = this.noiseGenerator.noise(worldX * 0.008, worldZ * 0.008);
+        valleyNoise = Math.pow(Math.abs(valleyNoise), 0.7) * Math.sign(valleyNoise);
+        
+        // Hills and medium features with varying persistence
+        let hillNoise = 0;
+        hillNoise += this.noiseGenerator.noise(worldX * 0.015, worldZ * 0.015) * 0.5;
+        hillNoise += this.noiseGenerator.noise(worldX * 0.03, worldZ * 0.03) * 0.25;
+        hillNoise += this.noiseGenerator.noise(worldX * 0.06, worldZ * 0.06) * 0.125;
+        
+        // Fine details
+        let detailNoise = this.noiseGenerator.noise(worldX * 0.1, worldZ * 0.1) * 0.1;
+        
+        // Combine layers
         let height = 0;
-        height += this.noiseGenerator.noise(worldX * 0.01, worldZ * 0.01) * 20;
-        height += this.noiseGenerator.noise(worldX * 0.05, worldZ * 0.05) * 5;
-        height += this.noiseGenerator.noise(worldX * 0.1, worldZ * 0.1) * 1;
         
-        this.heightData[index++] = Math.max(0, height);
+        // Base elevation influenced by continental noise
+        height += (continentalHeight * 0.5 + 0.5) * 30;
+        
+        // Add mountain ridges with smooth transitions
+        const ridgeStrength = MathUtils.smoothstep(-0.3, 0.2, continentalHeight);
+        height += ridgeNoise * 80 * ridgeStrength;
+        
+        // Carve valleys
+        height += valleyNoise * 40;
+        
+        // Add hills with persistence falloff
+        height += hillNoise * 35;
+        
+        // Add fine details
+        height += detailNoise * 8;
+        
+        // Create water areas (lakes and rivers)
+        const waterNoise = this.noiseGenerator.noise(worldX * 0.003, worldZ * 0.003);
+        const riverNoise = this.noiseGenerator.noise(worldX * 0.01, worldZ * 0.01);
+        
+        // Lakes in low-lying areas
+        if (waterNoise < -0.4 && height < 15) {
+          height = -3 - waterNoise * 2; // Below water level (0)
+        }
+        // River valleys
+        else if (Math.abs(riverNoise) < 0.1 && height < 25) {
+          height = height * 0.3 - 2;
+        }
+        // Smooth lower valleys
+        else if (height < 20) {
+          height = height * 0.7;
+        }
+        
+        // Allow negative heights for underwater terrain
+        height = Math.max(-8, height);
+        
+        // Store row-major (z, x)
+        const idx = z * (resolution + 1) + x;
+        this.heightData[idx] = height;
       }
     }
   }
@@ -141,12 +218,8 @@ export class ImprovedChunk {
     } else {
       const texture = this.assetLoader.getTexture('forestfloor');
       if (texture) {
-        material = new THREE.MeshBasicMaterial({
-          map: texture,
-          side: THREE.DoubleSide
-        });
+        material = PixelPerfectUtils.createPixelPerfectMaterial(texture, false);
         texture.repeat.set(8, 8);
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       } else {
         material = new THREE.MeshBasicMaterial({
           color: 0x4a7c59,
@@ -155,13 +228,14 @@ export class ImprovedChunk {
       }
     }
     
-    // Create and position mesh
+    // Create and position mesh (centered like legacy terrain)
     this.terrainMesh = new THREE.Mesh(geometry, material);
     this.terrainMesh.position.set(
-      this.chunkX * this.size,
+      this.chunkX * this.size + this.size / 2,
       0,
-      this.chunkZ * this.size
+      this.chunkZ * this.size + this.size / 2
     );
+    this.terrainMesh.receiveShadow = true;
     
     // Store geometry reference for collision
     this.terrainGeometry = geometry;
@@ -177,42 +251,128 @@ export class ImprovedChunk {
     const baseX = this.chunkX * this.size;
     const baseZ = this.chunkZ * this.size;
     
-    // Generate grass
-    const grassCount = Math.floor(this.size * this.size * 0.01);
-    for (let i = 0; i < grassCount; i++) {
+    // LAYER 1: Dense fern ground cover (covers most areas)
+    const fernCount = Math.floor(this.size * this.size * 0.5); // Increase to ~50% coverage for dense jungle floor
+    for (let i = 0; i < fernCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
       const height = this.getHeightAtLocal(localX, localZ);
       
-      this.grassInstances.push({
-        position: new THREE.Vector3(baseX + localX, height, baseZ + localZ),
+      this.fernInstances.push({
+        position: new THREE.Vector3(baseX + localX, height + 0.2, baseZ + localZ),
         scale: new THREE.Vector3(
-          MathUtils.randomInRange(0.7, 1.3),
-          MathUtils.randomInRange(0.8, 1.5),
+          MathUtils.randomInRange(0.8, 1.2),
+          MathUtils.randomInRange(0.8, 1.2),
           1
         ),
-        rotation: 0
+        rotation: Math.random() * Math.PI * 2
       });
     }
     
-    // Generate trees with Poisson disk sampling
-    const treePoints = MathUtils.poissonDiskSampling(this.size, this.size, 15);
-    const treeCount = Math.min(treePoints.length, 20);
+    // LAYER 1B: Elephant ear plants sprinkled in
+    const elephantEarCount = Math.floor(this.size * this.size * 0.08); // Increase to ~8% coverage
+    for (let i = 0; i < elephantEarCount; i++) {
+      const localX = Math.random() * this.size;
+      const localZ = Math.random() * this.size;
+      const height = this.getHeightAtLocal(localX, localZ);
+      
+      this.elephantEarInstances.push({
+        position: new THREE.Vector3(baseX + localX, height + 0.2, baseZ + localZ),
+        scale: new THREE.Vector3(
+          MathUtils.randomInRange(1.0, 1.5),
+          MathUtils.randomInRange(1.0, 1.5),
+          1
+        ),
+        rotation: Math.random() * Math.PI * 2
+      });
+    }
     
-    for (let i = 0; i < treeCount; i++) {
-      const point = treePoints[i];
+    // LAYER 2: Fan Palm Clusters - varied elevation, especially slopes
+    const fanPalmCount = Math.floor(this.size * this.size * 0.05); // Increase to ~5% coverage
+    for (let i = 0; i < fanPalmCount; i++) {
+      const localX = Math.random() * this.size;
+      const localZ = Math.random() * this.size;
+      const height = this.getHeightAtLocal(localX, localZ);
+      
+      this.fanPalmInstances.push({
+        position: new THREE.Vector3(baseX + localX, height + 0.6, baseZ + localZ),
+        scale: new THREE.Vector3(
+          MathUtils.randomInRange(0.8, 1.2),
+          MathUtils.randomInRange(0.8, 1.2),
+          1
+        ),
+        rotation: Math.random() * Math.PI * 2
+      });
+    }
+    
+    // LAYER 2B: Coconut Palms - prefer lower elevations/water edges
+    const coconutPoints = MathUtils.poissonDiskSampling(this.size, this.size, 12);
+    for (let i = 0; i < Math.min(coconutPoints.length * 0.5, 30); i++) {
+      const point = coconutPoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
       
-      this.treeInstances.push({
-        position: new THREE.Vector3(baseX + point.x, height + 2.5, baseZ + point.y),
+      // Prefer lower elevations
+      if (height < 10 || Math.random() < 0.3) {
+        this.coconutInstances.push({
+          position: new THREE.Vector3(baseX + point.x, height + 2.0, baseZ + point.y),
+          scale: new THREE.Vector3(
+            MathUtils.randomInRange(0.8, 1.0),
+            MathUtils.randomInRange(0.9, 1.1),
+            1
+          ),
+          rotation: Math.random() * Math.PI * 2
+        });
+      }
+    }
+    
+    // LAYER 3: Areca Palm Clusters - everywhere as mid-size
+    const arecaPoints = MathUtils.poissonDiskSampling(this.size, this.size, 8);
+    for (let i = 0; i < Math.min(arecaPoints.length * 0.8, 50); i++) {
+      const point = arecaPoints[i];
+      const height = this.getHeightAtLocal(point.x, point.y);
+      
+      this.arecaInstances.push({
+        position: new THREE.Vector3(baseX + point.x, height + 1.6, baseZ + point.y),
         scale: new THREE.Vector3(
-          MathUtils.randomInRange(0.8, 1.5),
-          MathUtils.randomInRange(0.9, 1.8),
+          MathUtils.randomInRange(0.8, 1.0),
+          MathUtils.randomInRange(0.8, 1.0),
           1
         ),
-        rotation: 0
+        rotation: Math.random() * Math.PI * 2
       });
     }
+    
+    // LAYER 4: Giant Canopy Trees - Common but spaced out
+    const giantTreePoints = MathUtils.poissonDiskSampling(this.size, this.size, 20);
+    for (let i = 0; i < Math.min(giantTreePoints.length, 12); i++) {
+      const point = giantTreePoints[i];
+      const height = this.getHeightAtLocal(point.x, point.y);
+      
+      // Alternate between Dipterocarp and Banyan
+      if (i % 2 === 0) {
+        this.dipterocarpInstances.push({
+          position: new THREE.Vector3(baseX + point.x, height + 8.0, baseZ + point.y),
+          scale: new THREE.Vector3(
+            MathUtils.randomInRange(0.9, 1.1),
+            MathUtils.randomInRange(0.9, 1.1),
+            1
+          ),
+          rotation: Math.random() * Math.PI * 2
+        });
+      } else {
+        this.banyanInstances.push({
+          position: new THREE.Vector3(baseX + point.x, height + 7.0, baseZ + point.y),
+          scale: new THREE.Vector3(
+            MathUtils.randomInRange(0.9, 1.1),
+            MathUtils.randomInRange(0.9, 1.1),
+            1
+          ),
+          rotation: Math.random() * Math.PI * 2
+        });
+      }
+    }
+    
+    // No legacy combination; we pass specific layers directly to the global system
   }
 
   /**

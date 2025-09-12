@@ -121,7 +121,7 @@ class PixelArtSandbox {
       // Keep original systems for fallback compatibility
       this.terrain = new Terrain(this.scene);
       this.billboardSystem = new BillboardSystem(this.scene, this.camera);
-      this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain);
+      this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain, this.assetLoader);
       this.playerController = new PlayerController(this.camera, this.terrain);
       this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain);
       this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
@@ -196,9 +196,10 @@ class PixelArtSandbox {
     const forestTexture = this.assetLoader.getTexture('forestfloor')!;
     this.terrain.createTerrain(forestTexture);
 
-    // Generate world vegetation
-    const grassTexture = this.assetLoader.getTexture('grass')!;
-    const treeTexture = this.assetLoader.getTexture('tree')!;
+    // Generate jungle world vegetation
+    // Pass dummy textures since we use AssetLoader internally now
+    const grassTexture = this.assetLoader.getTexture('grass') || new THREE.Texture();
+    const treeTexture = this.assetLoader.getTexture('tree') || new THREE.Texture();
     this.worldGenerator.generateWorld(grassTexture, treeTexture);
 
     // Spawn enemies

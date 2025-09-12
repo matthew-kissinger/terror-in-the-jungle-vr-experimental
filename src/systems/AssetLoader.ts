@@ -25,6 +25,17 @@ export class AssetLoader implements GameSystem {
     // Known assets in the project root
     const knownAssets = [
       'forestfloor.png',
+      // Large canopy trees (scale 8-12)
+      'DipterocarpGiant.png',
+      'TwisterBanyan.png',
+      // Medium palms (scale 4-6)
+      'CoconutPalm.png',
+      'ArecaPalmCluster.png',
+      // Small ground foliage (scale 1-3)
+      'Fern.png',
+      'FanPalmCluster.png',
+      'ElephantEarPlants.png',
+      // Legacy trees (kept for compatibility)
       'tree.png',
       'tree1.png',
       'tree2.png', 
@@ -32,11 +43,18 @@ export class AssetLoader implements GameSystem {
       'grass.png',
       'mushroom.png',
       'wheat.png',
+      // Enemies
       'imp.png',
       'zombie.png',
       'goblin.png',
       'flying_monster.png',
+      // Soldier sprites
+      'SoliderWalking.png',
+      'SoldierAlert.png',
+      'SoliderFiring.png',
+      // UI/Player
       'first-person.png',
+      // Environment
       'skybox.png',
       'skybox2.png',
       'skybox3.png',
@@ -65,10 +83,15 @@ export class AssetLoader implements GameSystem {
     if (name.includes('floor') || name.includes('ground')) {
       return AssetCategory.GROUND;
     }
-    if (name.includes('tree') || name.includes('grass') || name.includes('mushroom') || name.includes('wheat')) {
+    // Expanded foliage detection for jungle assets
+    if (name.includes('tree') || name.includes('grass') || name.includes('mushroom') || name.includes('wheat') ||
+        name.includes('dipterocarp') || name.includes('banyan') || name.includes('palm') || 
+        name.includes('fern') || name.includes('elephant')) {
       return AssetCategory.FOLIAGE;
     }
-    if (name.includes('imp') || name.includes('enemy') || name.includes('zombie') || name.includes('goblin')) {
+    // Expanded enemy detection including soldiers
+    if (name.includes('imp') || name.includes('enemy') || name.includes('zombie') || name.includes('goblin') ||
+        name.includes('soldier') || name.includes('solider') || name.includes('flying_monster')) {
       return AssetCategory.ENEMY;
     }
     if (name.includes('skybox') || name.includes('sky')) {

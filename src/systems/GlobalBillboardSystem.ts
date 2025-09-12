@@ -14,42 +14,58 @@ export class GlobalBillboardSystem implements GameSystem {
   private camera: THREE.Camera;
   private assetLoader: AssetLoader;
   
-  // Global instanced meshes
+  // Global instanced meshes - Full Jungle System
+  // Ground cover (most common)
+  private fernInstances?: THREE.InstancedMesh;           // Dense ground cover
+  private elephantEarInstances?: THREE.InstancedMesh;    // Sprinkled ground plants
+  
+  // Mid-level vegetation
+  private fanPalmInstances?: THREE.InstancedMesh;        // Near water/varied elevation
+  private coconutInstances?: THREE.InstancedMesh;        // Water edge palms
+  private arecaInstances?: THREE.InstancedMesh;          // Everywhere mid-size
+  
+  // Giant canopy trees (rare but huge)
+  private dipterocarpInstances?: THREE.InstancedMesh;    // Giant canopy
+  private banyanInstances?: THREE.InstancedMesh;         // Giant canopy
+  
+  // Legacy compatibility
   private grassInstances?: THREE.InstancedMesh;
   private treeInstances?: THREE.InstancedMesh;
-  private mushroomInstances?: THREE.InstancedMesh;
-  private wheatInstances?: THREE.InstancedMesh;
-  private tree1Instances?: THREE.InstancedMesh;
-  private tree2Instances?: THREE.InstancedMesh;
-  private tree3Instances?: THREE.InstancedMesh;
   
   // Chunk tracking
   private chunkInstances: Map<string, Map<string, ChunkInstances>> = new Map();
   
   // Instance allocation tracking
+  private dipterocarpAllocationIndex = 0;
+  private banyanAllocationIndex = 0;
+  private coconutAllocationIndex = 0;
+  private arecaAllocationIndex = 0;
+  private fernAllocationIndex = 0;
+  private fanPalmAllocationIndex = 0;
+  private elephantEarAllocationIndex = 0;
   private grassAllocationIndex = 0;
   private treeAllocationIndex = 0;
-  private mushroomAllocationIndex = 0;
-  private wheatAllocationIndex = 0;
-  private tree1AllocationIndex = 0;
-  private tree2AllocationIndex = 0;
-  private tree3AllocationIndex = 0;
+  
+  private freeDipterocarpSlots: number[] = [];
+  private freeBanyanSlots: number[] = [];
+  private freeCoconutSlots: number[] = [];
+  private freeArecaSlots: number[] = [];
+  private freeFernSlots: number[] = [];
+  private freeFanPalmSlots: number[] = [];
+  private freeElephantEarSlots: number[] = [];
   private freeGrassSlots: number[] = [];
   private freeTreeSlots: number[] = [];
-  private freeMushroomSlots: number[] = [];
-  private freeWheatSlots: number[] = [];
-  private freeTree1Slots: number[] = [];
-  private freeTree2Slots: number[] = [];
-  private freeTree3Slots: number[] = [];
   
-  // Configuration
-  private readonly maxGrassInstances = 100000;
-  private readonly maxTreeInstances = 10000;
-  private readonly maxMushroomInstances = 50000;
-  private readonly maxWheatInstances = 50000;
-  private readonly maxTree1Instances = 5000;
-  private readonly maxTree2Instances = 5000;
-  private readonly maxTree3Instances = 5000;
+  // Configuration - Proper jungle distribution
+  private readonly maxFernInstances = 80000;             // Dense ground cover everywhere
+  private readonly maxElephantEarInstances = 15000;      // Sprinkled ground plants
+  private readonly maxFanPalmInstances = 10000;          // Mid-level near water
+  private readonly maxCoconutInstances = 8000;           // Water edge palms
+  private readonly maxArecaInstances = 15000;            // Everywhere mid-size
+  private readonly maxDipterocarpInstances = 3000;       // Common giant trees
+  private readonly maxBanyanInstances = 3000;            // Common giant trees
+  private readonly maxGrassInstances = 10000;            // Legacy (using for ferns)
+  private readonly maxTreeInstances = 5000;              // Legacy (using for palms)
   
   // Temporary objects for matrix calculations
   private dummy = new THREE.Object3D();
@@ -65,58 +81,147 @@ export class GlobalBillboardSystem implements GameSystem {
   }
 
   async init(): Promise<void> {
-    console.log('🌐 Initializing Global Billboard System...');
+    console.log('🌴 Initializing Terror in the Jungle Billboard System...');
     
-    // Create global grass instances
+    // Initialize ALL jungle foliage with proper textures
+    await this.initializeJungleFoliage();
+    
+    // Also initialize base grass/tree for the system to work
     await this.initializeGrassInstances();
-    
-    // Create global tree instances
     await this.initializeTreeInstances();
     
-    // Create mushroom instances
-    await this.initializeMushroomInstances();
+    console.log(`✅ Jungle Billboard System ready with all tropical foliage types`);
+  }
+  
+  private async initializeJungleFoliage(): Promise<void> {
+    // Ground cover - Dense ferns everywhere
+    await this.initializeUndergrowth('Fern', 'fern', this.maxFernInstances, 1.5, 2.0);
+    await this.initializeUndergrowth('ElephantEarPlants', 'elephantEar', this.maxElephantEarInstances, 2.5, 3.0);
     
-    // Create wheat instances
-    await this.initializeWheatInstances();
+    // Mid-level vegetation
+    await this.initializePalm('FanPalmCluster', 'fanPalm', this.maxFanPalmInstances, 3, 4);
+    await this.initializePalm('CoconutPalm', 'coconut', this.maxCoconutInstances, 5, 7);
+    await this.initializePalm('ArecaPalmCluster', 'areca', this.maxArecaInstances, 4, 6);
     
-    // Create tree variant instances
-    await this.initializeTreeVariantInstances();
+    // Giant canopy trees - HUGE
+    await this.initializeCanopyTree('DipterocarpGiant', 'dipterocarp', this.maxDipterocarpInstances, 15, 20);
+    await this.initializeCanopyTree('TwisterBanyan', 'banyan', this.maxBanyanInstances, 14, 18);
+  }
+  
+  private async initializeCanopyTree(textureName: string, instanceName: string, maxInstances: number, width: number, height: number): Promise<void> {
+    const texture = this.assetLoader.getTexture(textureName);
+    if (!texture) {
+      console.warn(`❌ ${textureName} texture not found`);
+      return;
+    }
     
-    console.log(`✅ Global Billboard System ready: ${this.maxGrassInstances} grass slots, ${this.maxTreeInstances} tree slots`);
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const material = PixelPerfectUtils.createPixelPerfectMaterial(texture, true);
+    
+    const mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.userData.type = `global_${instanceName}`;
+    
+    this.scene.add(mesh);
+    
+    // Store the mesh
+    if (instanceName === 'dipterocarp') this.dipterocarpInstances = mesh;
+    if (instanceName === 'banyan') this.banyanInstances = mesh;
+    
+    console.log(`🌳 ${textureName} canopy mesh created: ${maxInstances} max instances`);
+  }
+  
+  private async initializePalm(textureName: string, instanceName: string, maxInstances: number, width: number, height: number): Promise<void> {
+    const texture = this.assetLoader.getTexture(textureName);
+    if (!texture) {
+      console.warn(`❌ ${textureName} texture not found`);
+      return;
+    }
+    
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const material = PixelPerfectUtils.createPixelPerfectMaterial(texture, true);
+    
+    const mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.userData.type = `global_${instanceName}`;
+    
+    this.scene.add(mesh);
+    
+    // Store the mesh
+    if (instanceName === 'coconut') this.coconutInstances = mesh;
+    if (instanceName === 'areca') this.arecaInstances = mesh;
+    if (instanceName === 'fanPalm') this.fanPalmInstances = mesh;
+    
+    console.log(`🌴 ${textureName} palm mesh created: ${maxInstances} max instances`);
+  }
+  
+  private async initializeUndergrowth(textureName: string, instanceName: string, maxInstances: number, width: number, height: number): Promise<void> {
+    const texture = this.assetLoader.getTexture(textureName);
+    if (!texture) {
+      console.warn(`❌ ${textureName} texture not found`);
+      return;
+    }
+    
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const material = PixelPerfectUtils.createPixelPerfectMaterial(texture, true);
+    
+    const mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.userData.type = `global_${instanceName}`;
+    
+    this.scene.add(mesh);
+    
+    // Store the mesh
+    if (instanceName === 'fern') this.fernInstances = mesh;
+    if (instanceName === 'fanPalm') this.fanPalmInstances = mesh;
+    if (instanceName === 'elephantEar') this.elephantEarInstances = mesh;
+    
+    console.log(`🌿 ${textureName} undergrowth mesh created: ${maxInstances} max instances`);
   }
 
   private async initializeGrassInstances(): Promise<void> {
-    const grassTexture = this.assetLoader.getTexture('grass');
+    // For now use Fern as the base undergrowth texture
+    // TODO: Implement multi-texture system for variety
+    const grassTexture = this.assetLoader.getTexture('Fern');
     if (!grassTexture) {
-      console.warn('❌ Grass texture not found for global billboard system');
+      console.warn('❌ Fern texture not found for global billboard system');
       return;
     }
 
-    // Create geometry and material
-    const geometry = new THREE.PlaneGeometry(2, 3);
+    // Create geometry and material - varied sizes for undergrowth
+    const geometry = new THREE.PlaneGeometry(2.5, 2.5);
     const material = PixelPerfectUtils.createPixelPerfectMaterial(grassTexture, true);
     
     // Create the global instanced mesh
     this.grassInstances = new THREE.InstancedMesh(geometry, material, this.maxGrassInstances);
     this.grassInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.grassInstances.castShadow = true;
+    this.grassInstances.castShadow = false; // No shadows for undergrowth
     this.grassInstances.frustumCulled = false; // Prevent culling issues with large world
     this.grassInstances.count = 0; // Start with no visible instances
     this.grassInstances.userData.type = 'global_grass';
     
     this.scene.add(this.grassInstances);
-    console.log(`🌱 Global grass instanced mesh created: ${this.maxGrassInstances} max instances`);
+    console.log(`🌿 Jungle undergrowth mesh created: ${this.maxGrassInstances} max instances`);
   }
 
   private async initializeTreeInstances(): Promise<void> {
-    const treeTexture = this.assetLoader.getTexture('tree');
+    // Use CoconutPalm texture for jungle trees
+    const treeTexture = this.assetLoader.getTexture('CoconutPalm');
     if (!treeTexture) {
-      console.warn('❌ Tree texture not found for global billboard system');
+      console.warn('❌ CoconutPalm texture not found for global billboard system');
       return;
     }
 
-    // Create geometry and material - BIGGER TREES
-    const geometry = new THREE.PlaneGeometry(12, 18); // 3x bigger trees
+    // Create geometry and material - Jungle palms
+    const geometry = new THREE.PlaneGeometry(8, 12); // Palm tree size
     const material = PixelPerfectUtils.createPixelPerfectMaterial(treeTexture, true);
     
     // Create the global instanced mesh
@@ -128,97 +233,13 @@ export class GlobalBillboardSystem implements GameSystem {
     this.treeInstances.userData.type = 'global_trees';
     
     this.scene.add(this.treeInstances);
-    console.log(`🌳 Global tree instanced mesh created: ${this.maxTreeInstances} max instances`);
+    console.log(`🌴 Jungle palm tree mesh created: ${this.maxTreeInstances} max instances`);
   }
 
-  private async initializeMushroomInstances(): Promise<void> {
-    const mushroomTexture = this.assetLoader.getTexture('mushroom');
-    if (!mushroomTexture) {
-      console.warn('❌ Mushroom texture not found for global billboard system');
-      return;
-    }
-
-    const geometry = new THREE.PlaneGeometry(2, 2); // Bigger mushroom sprites
-    const material = PixelPerfectUtils.createPixelPerfectMaterial(mushroomTexture, true);
-    
-    this.mushroomInstances = new THREE.InstancedMesh(geometry, material, this.maxMushroomInstances);
-    this.mushroomInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mushroomInstances.frustumCulled = false;
-    this.mushroomInstances.count = 0;
-    this.mushroomInstances.userData.type = 'global_mushrooms';
-    
-    this.scene.add(this.mushroomInstances);
-    console.log(`🍄 Global mushroom instanced mesh created: ${this.maxMushroomInstances} max instances`);
-  }
-
-  private async initializeWheatInstances(): Promise<void> {
-    const wheatTexture = this.assetLoader.getTexture('wheat');
-    if (!wheatTexture) {
-      console.warn('❌ Wheat texture not found for global billboard system');
-      return;
-    }
-
-    const geometry = new THREE.PlaneGeometry(2, 3);
-    const material = PixelPerfectUtils.createPixelPerfectMaterial(wheatTexture, true);
-    
-    this.wheatInstances = new THREE.InstancedMesh(geometry, material, this.maxWheatInstances);
-    this.wheatInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.wheatInstances.frustumCulled = false;
-    this.wheatInstances.count = 0;
-    this.wheatInstances.userData.type = 'global_wheat';
-    
-    this.scene.add(this.wheatInstances);
-    console.log(`🌾 Global wheat instanced mesh created: ${this.maxWheatInstances} max instances`);
-  }
+  // Removed legacy mushroom and wheat systems
 
   private async initializeTreeVariantInstances(): Promise<void> {
-    // Tree1 (Pine)
-    const tree1Texture = this.assetLoader.getTexture('tree1');
-    if (tree1Texture) {
-      const geometry = new THREE.PlaneGeometry(14, 20);
-      const material = PixelPerfectUtils.createPixelPerfectMaterial(tree1Texture, true);
-      
-      this.tree1Instances = new THREE.InstancedMesh(geometry, material, this.maxTree1Instances);
-      this.tree1Instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.tree1Instances.castShadow = true;
-      this.tree1Instances.frustumCulled = false;
-      this.tree1Instances.count = 0;
-      this.tree1Instances.userData.type = 'global_tree1';
-      this.scene.add(this.tree1Instances);
-      console.log(`🌲 Global pine tree instanced mesh created: ${this.maxTree1Instances} max instances`);
-    }
-    
-    // Tree2 (Oak)
-    const tree2Texture = this.assetLoader.getTexture('tree2');
-    if (tree2Texture) {
-      const geometry = new THREE.PlaneGeometry(16, 18);
-      const material = PixelPerfectUtils.createPixelPerfectMaterial(tree2Texture, true);
-      
-      this.tree2Instances = new THREE.InstancedMesh(geometry, material, this.maxTree2Instances);
-      this.tree2Instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.tree2Instances.castShadow = true;
-      this.tree2Instances.frustumCulled = false;
-      this.tree2Instances.count = 0;
-      this.tree2Instances.userData.type = 'global_tree2';
-      this.scene.add(this.tree2Instances);
-      console.log(`🌳 Global oak tree instanced mesh created: ${this.maxTree2Instances} max instances`);
-    }
-    
-    // Tree3 (Birch)
-    const tree3Texture = this.assetLoader.getTexture('tree3');
-    if (tree3Texture) {
-      const geometry = new THREE.PlaneGeometry(12, 19);
-      const material = PixelPerfectUtils.createPixelPerfectMaterial(tree3Texture, true);
-      
-      this.tree3Instances = new THREE.InstancedMesh(geometry, material, this.maxTree3Instances);
-      this.tree3Instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.tree3Instances.castShadow = true;
-      this.tree3Instances.frustumCulled = false;
-      this.tree3Instances.count = 0;
-      this.tree3Instances.userData.type = 'global_tree3';
-      this.scene.add(this.tree3Instances);
-      console.log(`🌴 Global birch tree instanced mesh created: ${this.maxTree3Instances} max instances`);
-    }
+    // Legacy tree variants removed
   }
 
   update(deltaTime: number): void {
@@ -254,17 +275,19 @@ export class GlobalBillboardSystem implements GameSystem {
   }
 
   /**
-   * Add billboard instances for a specific chunk
+   * Add billboard instances for a specific chunk - Updated for jungle
    */
   addChunkInstances(
     chunkKey: string, 
     grassInstances: BillboardInstance[], 
     treeInstances: BillboardInstance[],
-    mushroomInstances?: BillboardInstance[],
-    wheatInstances?: BillboardInstance[],
-    tree1Instances?: BillboardInstance[],
-    tree2Instances?: BillboardInstance[],
-    tree3Instances?: BillboardInstance[]
+    fernInstances?: BillboardInstance[],
+    elephantEarInstances?: BillboardInstance[],
+    fanPalmInstances?: BillboardInstance[],
+    coconutInstances?: BillboardInstance[],
+    arecaInstances?: BillboardInstance[],
+    dipterocarpInstances?: BillboardInstance[],
+    banyanInstances?: BillboardInstance[]
   ): void {
     // Initialize chunk tracking if not exists
     if (!this.chunkInstances.has(chunkKey)) {
@@ -291,52 +314,70 @@ export class GlobalBillboardSystem implements GameSystem {
       }
     }
     
-    // Add mushroom instances
-    if (mushroomInstances && mushroomInstances.length > 0) {
-      const mushroomAllocation = this.allocateInstances(mushroomInstances, 'mushroom');
-      if (mushroomAllocation) {
-        chunkData.set('mushroom', mushroomAllocation);
-        this.updateInstanceMatrices('mushroom', mushroomAllocation);
+    // Add additional fern instances to existing grass mesh
+    if (fernInstances && fernInstances.length > 0) {
+      const fernAllocation = this.allocateInstances(fernInstances, 'fern');
+      if (fernAllocation) {
+        chunkData.set('fern', fernAllocation);
+        this.updateInstanceMatrices('fern', fernAllocation);
       }
     }
     
-    // Add wheat instances
-    if (wheatInstances && wheatInstances.length > 0) {
-      const wheatAllocation = this.allocateInstances(wheatInstances, 'wheat');
-      if (wheatAllocation) {
-        chunkData.set('wheat', wheatAllocation);
-        this.updateInstanceMatrices('wheat', wheatAllocation);
+    // Add elephant ear instances
+    if (elephantEarInstances && elephantEarInstances.length > 0) {
+      const elephantEarAllocation = this.allocateInstances(elephantEarInstances, 'elephantEar');
+      if (elephantEarAllocation) {
+        chunkData.set('elephantEar', elephantEarAllocation);
+        this.updateInstanceMatrices('elephantEar', elephantEarAllocation);
       }
     }
     
-    // Add tree1 instances
-    if (tree1Instances && tree1Instances.length > 0) {
-      const tree1Allocation = this.allocateInstances(tree1Instances, 'tree1');
-      if (tree1Allocation) {
-        chunkData.set('tree1', tree1Allocation);
-        this.updateInstanceMatrices('tree1', tree1Allocation);
+    // Add fan palm instances
+    if (fanPalmInstances && fanPalmInstances.length > 0) {
+      const fanPalmAllocation = this.allocateInstances(fanPalmInstances, 'fanPalm');
+      if (fanPalmAllocation) {
+        chunkData.set('fanPalm', fanPalmAllocation);
+        this.updateInstanceMatrices('fanPalm', fanPalmAllocation);
       }
     }
     
-    // Add tree2 instances
-    if (tree2Instances && tree2Instances.length > 0) {
-      const tree2Allocation = this.allocateInstances(tree2Instances, 'tree2');
-      if (tree2Allocation) {
-        chunkData.set('tree2', tree2Allocation);
-        this.updateInstanceMatrices('tree2', tree2Allocation);
+    // Add coconut palm instances
+    if (coconutInstances && coconutInstances.length > 0) {
+      const coconutAllocation = this.allocateInstances(coconutInstances, 'coconut');
+      if (coconutAllocation) {
+        chunkData.set('coconut', coconutAllocation);
+        this.updateInstanceMatrices('coconut', coconutAllocation);
       }
     }
     
-    // Add tree3 instances
-    if (tree3Instances && tree3Instances.length > 0) {
-      const tree3Allocation = this.allocateInstances(tree3Instances, 'tree3');
-      if (tree3Allocation) {
-        chunkData.set('tree3', tree3Allocation);
-        this.updateInstanceMatrices('tree3', tree3Allocation);
+    // Add areca palm instances
+    if (arecaInstances && arecaInstances.length > 0) {
+      const arecaAllocation = this.allocateInstances(arecaInstances, 'areca');
+      if (arecaAllocation) {
+        chunkData.set('areca', arecaAllocation);
+        this.updateInstanceMatrices('areca', arecaAllocation);
       }
     }
     
-    console.log(`📍 Added instances for chunk ${chunkKey}: ${grassInstances.length} grass, ${treeInstances.length + (tree1Instances?.length || 0) + (tree2Instances?.length || 0) + (tree3Instances?.length || 0)} trees, ${mushroomInstances?.length || 0} mushrooms, ${wheatInstances?.length || 0} wheat`);
+    // Add dipterocarp giant tree instances
+    if (dipterocarpInstances && dipterocarpInstances.length > 0) {
+      const dipterocarpAllocation = this.allocateInstances(dipterocarpInstances, 'dipterocarp');
+      if (dipterocarpAllocation) {
+        chunkData.set('dipterocarp', dipterocarpAllocation);
+        this.updateInstanceMatrices('dipterocarp', dipterocarpAllocation);
+      }
+    }
+    
+    // Add banyan giant tree instances
+    if (banyanInstances && banyanInstances.length > 0) {
+      const banyanAllocation = this.allocateInstances(banyanInstances, 'banyan');
+      if (banyanAllocation) {
+        chunkData.set('banyan', banyanAllocation);
+        this.updateInstanceMatrices('banyan', banyanAllocation);
+      }
+    }
+    
+    console.log(`📍 Added instances for chunk ${chunkKey}: ${grassInstances.length} grass, ${treeInstances.length} trees, ${fernInstances?.length || 0} ferns, ${elephantEarInstances?.length || 0} elephant ears, ${fanPalmInstances?.length || 0} fan palms, ${coconutInstances?.length || 0} coconuts, ${arecaInstances?.length || 0} arecas, ${dipterocarpInstances?.length || 0} dipterocarp, ${banyanInstances?.length || 0} banyan`);
   }
 
   /**
@@ -364,7 +405,7 @@ export class GlobalBillboardSystem implements GameSystem {
     console.log(`🗑️ Removed instances for chunk ${chunkKey}`);
   }
 
-  private allocateInstances(instances: BillboardInstance[], type: 'grass' | 'tree' | 'mushroom' | 'wheat' | 'tree1' | 'tree2' | 'tree3'): ChunkInstances | null {
+  private allocateInstances(instances: BillboardInstance[], type: 'grass' | 'tree' | 'fern' | 'elephantEar' | 'fanPalm' | 'coconut' | 'areca' | 'dipterocarp' | 'banyan'): ChunkInstances | null {
     let freeSlots: number[];
     let maxInstances: number;
     let allocationIndex: number;
@@ -383,35 +424,47 @@ export class GlobalBillboardSystem implements GameSystem {
         allocationIndex = this.treeAllocationIndex;
         instanceMesh = this.treeInstances;
         break;
-      case 'mushroom':
-        freeSlots = this.freeMushroomSlots;
-        maxInstances = this.maxMushroomInstances;
-        allocationIndex = this.mushroomAllocationIndex;
-        instanceMesh = this.mushroomInstances;
+      case 'fern':
+        freeSlots = this.freeFernSlots;
+        maxInstances = this.maxFernInstances;
+        allocationIndex = this.fernAllocationIndex;
+        instanceMesh = this.fernInstances;
         break;
-      case 'wheat':
-        freeSlots = this.freeWheatSlots;
-        maxInstances = this.maxWheatInstances;
-        allocationIndex = this.wheatAllocationIndex;
-        instanceMesh = this.wheatInstances;
+      case 'elephantEar':
+        freeSlots = this.freeElephantEarSlots;
+        maxInstances = this.maxElephantEarInstances;
+        allocationIndex = this.elephantEarAllocationIndex;
+        instanceMesh = this.elephantEarInstances;
         break;
-      case 'tree1':
-        freeSlots = this.freeTree1Slots;
-        maxInstances = this.maxTree1Instances;
-        allocationIndex = this.tree1AllocationIndex;
-        instanceMesh = this.tree1Instances;
+      case 'fanPalm':
+        freeSlots = this.freeFanPalmSlots;
+        maxInstances = this.maxFanPalmInstances;
+        allocationIndex = this.fanPalmAllocationIndex;
+        instanceMesh = this.fanPalmInstances;
         break;
-      case 'tree2':
-        freeSlots = this.freeTree2Slots;
-        maxInstances = this.maxTree2Instances;
-        allocationIndex = this.tree2AllocationIndex;
-        instanceMesh = this.tree2Instances;
+      case 'coconut':
+        freeSlots = this.freeCoconutSlots;
+        maxInstances = this.maxCoconutInstances;
+        allocationIndex = this.coconutAllocationIndex;
+        instanceMesh = this.coconutInstances;
         break;
-      case 'tree3':
-        freeSlots = this.freeTree3Slots;
-        maxInstances = this.maxTree3Instances;
-        allocationIndex = this.tree3AllocationIndex;
-        instanceMesh = this.tree3Instances;
+      case 'areca':
+        freeSlots = this.freeArecaSlots;
+        maxInstances = this.maxArecaInstances;
+        allocationIndex = this.arecaAllocationIndex;
+        instanceMesh = this.arecaInstances;
+        break;
+      case 'dipterocarp':
+        freeSlots = this.freeDipterocarpSlots;
+        maxInstances = this.maxDipterocarpInstances;
+        allocationIndex = this.dipterocarpAllocationIndex;
+        instanceMesh = this.dipterocarpInstances;
+        break;
+      case 'banyan':
+        freeSlots = this.freeBanyanSlots;
+        maxInstances = this.maxBanyanInstances;
+        allocationIndex = this.banyanAllocationIndex;
+        instanceMesh = this.banyanInstances;
         break;
       default:
         return null;
@@ -444,20 +497,26 @@ export class GlobalBillboardSystem implements GameSystem {
         case 'tree':
           this.treeAllocationIndex += requiredSlots;
           break;
-        case 'mushroom':
-          this.mushroomAllocationIndex += requiredSlots;
+        case 'fern':
+          this.fernAllocationIndex += requiredSlots;
           break;
-        case 'wheat':
-          this.wheatAllocationIndex += requiredSlots;
+        case 'elephantEar':
+          this.elephantEarAllocationIndex += requiredSlots;
           break;
-        case 'tree1':
-          this.tree1AllocationIndex += requiredSlots;
+        case 'fanPalm':
+          this.fanPalmAllocationIndex += requiredSlots;
           break;
-        case 'tree2':
-          this.tree2AllocationIndex += requiredSlots;
+        case 'coconut':
+          this.coconutAllocationIndex += requiredSlots;
           break;
-        case 'tree3':
-          this.tree3AllocationIndex += requiredSlots;
+        case 'areca':
+          this.arecaAllocationIndex += requiredSlots;
+          break;
+        case 'dipterocarp':
+          this.dipterocarpAllocationIndex += requiredSlots;
+          break;
+        case 'banyan':
+          this.banyanAllocationIndex += requiredSlots;
           break;
       }
     }
@@ -495,17 +554,19 @@ export class GlobalBillboardSystem implements GameSystem {
     }
   }
 
-  private updateInstanceMatrices(type: 'grass' | 'tree' | 'mushroom' | 'wheat' | 'tree1' | 'tree2' | 'tree3', allocation: ChunkInstances): void {
+  private updateInstanceMatrices(type: 'grass' | 'tree' | 'fern' | 'elephantEar' | 'fanPalm' | 'coconut' | 'areca' | 'dipterocarp' | 'banyan', allocation: ChunkInstances): void {
     let instanceMesh: THREE.InstancedMesh | undefined;
     
     switch(type) {
       case 'grass': instanceMesh = this.grassInstances; break;
       case 'tree': instanceMesh = this.treeInstances; break;
-      case 'mushroom': instanceMesh = this.mushroomInstances; break;
-      case 'wheat': instanceMesh = this.wheatInstances; break;
-      case 'tree1': instanceMesh = this.tree1Instances; break;
-      case 'tree2': instanceMesh = this.tree2Instances; break;
-      case 'tree3': instanceMesh = this.tree3Instances; break;
+      case 'fern': instanceMesh = this.fernInstances; break;
+      case 'elephantEar': instanceMesh = this.elephantEarInstances; break;
+      case 'fanPalm': instanceMesh = this.fanPalmInstances; break;
+      case 'coconut': instanceMesh = this.coconutInstances; break;
+      case 'areca': instanceMesh = this.arecaInstances; break;
+      case 'dipterocarp': instanceMesh = this.dipterocarpInstances; break;
+      case 'banyan': instanceMesh = this.banyanInstances; break;
     }
     
     if (!instanceMesh) return;
@@ -545,39 +606,31 @@ export class GlobalBillboardSystem implements GameSystem {
       
       // Update all vegetation types
       const grassData = chunkData.get('grass');
-      if (grassData) {
-        this.updateBillboardRotations(grassData, cameraPosition, 'grass');
-      }
+      if (grassData) this.updateBillboardRotations(grassData, cameraPosition, 'grass');
       
       const treeData = chunkData.get('tree');
-      if (treeData) {
-        this.updateBillboardRotations(treeData, cameraPosition, 'tree');
-      }
+      if (treeData) this.updateBillboardRotations(treeData, cameraPosition, 'tree');
       
-      const mushroomData = chunkData.get('mushroom');
-      if (mushroomData) {
-        this.updateBillboardRotations(mushroomData, cameraPosition, 'mushroom');
-      }
+      const fernData = chunkData.get('fern');
+      if (fernData) this.updateBillboardRotations(fernData, cameraPosition, 'fern');
       
-      const wheatData = chunkData.get('wheat');
-      if (wheatData) {
-        this.updateBillboardRotations(wheatData, cameraPosition, 'wheat');
-      }
+      const elephantEarData = chunkData.get('elephantEar');
+      if (elephantEarData) this.updateBillboardRotations(elephantEarData, cameraPosition, 'elephantEar');
       
-      const tree1Data = chunkData.get('tree1');
-      if (tree1Data) {
-        this.updateBillboardRotations(tree1Data, cameraPosition, 'tree1');
-      }
+      const fanPalmData = chunkData.get('fanPalm');
+      if (fanPalmData) this.updateBillboardRotations(fanPalmData, cameraPosition, 'fanPalm');
       
-      const tree2Data = chunkData.get('tree2');
-      if (tree2Data) {
-        this.updateBillboardRotations(tree2Data, cameraPosition, 'tree2');
-      }
+      const coconutData = chunkData.get('coconut');
+      if (coconutData) this.updateBillboardRotations(coconutData, cameraPosition, 'coconut');
       
-      const tree3Data = chunkData.get('tree3');
-      if (tree3Data) {
-        this.updateBillboardRotations(tree3Data, cameraPosition, 'tree3');
-      }
+      const arecaData = chunkData.get('areca');
+      if (arecaData) this.updateBillboardRotations(arecaData, cameraPosition, 'areca');
+      
+      const dipterocarpData = chunkData.get('dipterocarp');
+      if (dipterocarpData) this.updateBillboardRotations(dipterocarpData, cameraPosition, 'dipterocarp');
+      
+      const banyanData = chunkData.get('banyan');
+      if (banyanData) this.updateBillboardRotations(banyanData, cameraPosition, 'banyan');
     });
     
     // Mark all matrices for update
@@ -587,34 +640,42 @@ export class GlobalBillboardSystem implements GameSystem {
     if (this.treeInstances) {
       this.treeInstances.instanceMatrix.needsUpdate = true;
     }
-    if (this.mushroomInstances) {
-      this.mushroomInstances.instanceMatrix.needsUpdate = true;
+    if (this.fernInstances) {
+      this.fernInstances.instanceMatrix.needsUpdate = true;
     }
-    if (this.wheatInstances) {
-      this.wheatInstances.instanceMatrix.needsUpdate = true;
+    if (this.elephantEarInstances) {
+      this.elephantEarInstances.instanceMatrix.needsUpdate = true;
     }
-    if (this.tree1Instances) {
-      this.tree1Instances.instanceMatrix.needsUpdate = true;
+    if (this.fanPalmInstances) {
+      this.fanPalmInstances.instanceMatrix.needsUpdate = true;
     }
-    if (this.tree2Instances) {
-      this.tree2Instances.instanceMatrix.needsUpdate = true;
+    if (this.coconutInstances) {
+      this.coconutInstances.instanceMatrix.needsUpdate = true;
     }
-    if (this.tree3Instances) {
-      this.tree3Instances.instanceMatrix.needsUpdate = true;
+    if (this.arecaInstances) {
+      this.arecaInstances.instanceMatrix.needsUpdate = true;
+    }
+    if (this.dipterocarpInstances) {
+      this.dipterocarpInstances.instanceMatrix.needsUpdate = true;
+    }
+    if (this.banyanInstances) {
+      this.banyanInstances.instanceMatrix.needsUpdate = true;
     }
   }
 
-  private updateBillboardRotations(allocation: ChunkInstances, cameraPosition: THREE.Vector3, type: 'grass' | 'tree' | 'mushroom' | 'wheat' | 'tree1' | 'tree2' | 'tree3'): void {
+  private updateBillboardRotations(allocation: ChunkInstances, cameraPosition: THREE.Vector3, type: 'grass' | 'tree' | 'fern' | 'elephantEar' | 'fanPalm' | 'coconut' | 'areca' | 'dipterocarp' | 'banyan'): void {
     let instanceMesh: THREE.InstancedMesh | undefined;
     
     switch(type) {
       case 'grass': instanceMesh = this.grassInstances; break;
       case 'tree': instanceMesh = this.treeInstances; break;
-      case 'mushroom': instanceMesh = this.mushroomInstances; break;
-      case 'wheat': instanceMesh = this.wheatInstances; break;
-      case 'tree1': instanceMesh = this.tree1Instances; break;
-      case 'tree2': instanceMesh = this.tree2Instances; break;
-      case 'tree3': instanceMesh = this.tree3Instances; break;
+      case 'fern': instanceMesh = this.fernInstances; break;
+      case 'elephantEar': instanceMesh = this.elephantEarInstances; break;
+      case 'fanPalm': instanceMesh = this.fanPalmInstances; break;
+      case 'coconut': instanceMesh = this.coconutInstances; break;
+      case 'areca': instanceMesh = this.arecaInstances; break;
+      case 'dipterocarp': instanceMesh = this.dipterocarpInstances; break;
+      case 'banyan': instanceMesh = this.banyanInstances; break;
     }
     
     if (!instanceMesh) return;

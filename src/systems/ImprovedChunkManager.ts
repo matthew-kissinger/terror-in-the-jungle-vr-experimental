@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GameSystem } from '../types';
 import { Chunk } from './Chunk';
+import { ImprovedChunk } from './ImprovedChunk';
 import { NoiseGenerator } from '../utils/NoiseGenerator';
 import { AssetLoader } from './AssetLoader';
 import { GlobalBillboardSystem } from './GlobalBillboardSystem';
@@ -179,7 +180,7 @@ export class ImprovedChunkManager implements GameSystem {
     if (this.chunks.has(chunkKey)) return;
     
     try {
-      const chunk = new Chunk(
+      const chunk = new ImprovedChunk(
         this.scene,
         this.assetLoader,
         chunkX,
@@ -209,7 +210,7 @@ export class ImprovedChunkManager implements GameSystem {
     // Use setTimeout to make it truly async and not block
     setTimeout(async () => {
       try {
-        const chunk = new Chunk(
+        const chunk = new ImprovedChunk(
           this.scene,
           this.assetLoader,
           chunkX,

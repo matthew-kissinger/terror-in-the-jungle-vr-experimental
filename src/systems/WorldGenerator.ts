@@ -3,25 +3,33 @@ import { GameSystem, WorldConfig, BillboardInstance } from '../types';
 import { MathUtils } from '../utils/Math';
 import { BillboardSystem } from './Billboard';
 import { Terrain } from './Terrain';
+import { AssetLoader } from './AssetLoader';
 
 export class WorldGenerator implements GameSystem {
   private config: WorldConfig;
   private billboardSystem: BillboardSystem;
   private terrain: Terrain;
+  private assetLoader?: AssetLoader;
 
   constructor(
     billboardSystem: BillboardSystem, 
     terrain: Terrain,
+    assetLoader?: AssetLoader,
     config: WorldConfig = {
       terrainSize: 200,
-      grassDensity: 0.25, // Even more grass
-      treeDensity: 0.05, // Much more trees for a proper forest
-      enemyCount: 10 // 5 imps + 5 attackers
+      grassDensity: 0.25, // Dense undergrowth for jungle
+      treeDensity: 0.05, // Mixed canopy and medium trees
+      enemyCount: 15 // More enemies for terror in the jungle
     }
   ) {
     this.billboardSystem = billboardSystem;
     this.terrain = terrain;
+    this.assetLoader = assetLoader;
     this.config = config;
+  }
+  
+  setAssetLoader(assetLoader: AssetLoader): void {
+    this.assetLoader = assetLoader;
   }
 
   async init(): Promise<void> {
@@ -40,14 +48,245 @@ export class WorldGenerator implements GameSystem {
     grassTexture: THREE.Texture,
     treeTexture: THREE.Texture
   ): void {
-    console.log('Generating world...');
+    console.log('🌴 Generating Terror in the Jungle world...');
     
-    this.generateGrass(grassTexture);
-    this.generateTrees(treeTexture);
+    // Generate jungle foliage in layers
+    this.generateJungleCanopy();
+    this.generateMediumPalms();
+    this.generateUndergrowth();
     
-    console.log('World generation complete');
+    console.log('🌴 Jungle world generation complete');
   }
 
+  private generateJungleCanopy(): void {
+    const terrainSize = this.config.terrainSize;
+    const halfSize = terrainSize / 2;
+    
+    // Large canopy trees - sparse distribution
+    const canopyDensity = 0.003; // Very sparse for giant trees
+    const canopyCount = Math.floor(terrainSize * terrainSize * canopyDensity);
+    
+    console.log(`🌳 CANOPY GENERATION:`);
+    console.log(`- Generating ${canopyCount} giant canopy trees`);
+    
+    // Load canopy textures
+    const dipterocarpTexture = this.assetLoader?.getTexture('DipterocarpGiant');
+    const banyanTexture = this.assetLoader?.getTexture('TwisterBanyan');
+    
+    if (dipterocarpTexture) {
+      // Create Dipterocarp giants
+      const dipterocarpCount = Math.floor(canopyCount * 0.5);
+      this.billboardSystem.createBillboardType('dipterocarp', dipterocarpTexture, dipterocarpCount, 10, 12);
+      
+      // Use wide Poisson spacing for giants
+      const points = MathUtils.poissonDiskSampling(terrainSize, terrainSize, 25); // Very wide spacing
+      
+      for (let i = 0; i < Math.min(dipterocarpCount, points.length); i++) {
+        const point = points[i];
+        const position = new THREE.Vector3(
+          point.x - halfSize,
+          this.terrain.getHeightAt(point.x - halfSize, point.y - halfSize) + 5,
+          point.y - halfSize
+        );
+        
+        const scale = new THREE.Vector3(
+          MathUtils.randomInRange(8, 10),
+          MathUtils.randomInRange(10, 12),
+          1
+        );
+        
+        this.billboardSystem.addInstance('dipterocarp', {
+          position,
+          scale,
+          rotation: MathUtils.randomInRange(0, Math.PI * 2)
+        });
+      }
+    }
+    
+    if (banyanTexture) {
+      // Create Twisted Banyans
+      const banyanCount = canopyCount - Math.floor(canopyCount * 0.5);
+      this.billboardSystem.createBillboardType('banyan', banyanTexture, banyanCount, 9, 11);
+      
+      // Separate Poisson for banyans to avoid overlap
+      const points = MathUtils.poissonDiskSampling(terrainSize, terrainSize, 20);
+      
+      for (let i = 0; i < Math.min(banyanCount, points.length); i++) {
+        const point = points[i];
+        const position = new THREE.Vector3(
+          point.x - halfSize,
+          this.terrain.getHeightAt(point.x - halfSize, point.y - halfSize) + 4.5,
+          point.y - halfSize
+        );
+        
+        const scale = new THREE.Vector3(
+          MathUtils.randomInRange(7, 9),
+          MathUtils.randomInRange(9, 11),
+          1
+        );
+        
+        this.billboardSystem.addInstance('banyan', {
+          position,
+          scale,
+          rotation: MathUtils.randomInRange(0, Math.PI * 2)
+        });
+      }
+    }
+    
+    console.log(`✅ Canopy layer complete`);
+  }
+  
+  private generateMediumPalms(): void {
+    const terrainSize = this.config.terrainSize;
+    const halfSize = terrainSize / 2;
+    
+    // Medium palm trees - moderate distribution
+    const palmDensity = 0.015; // More than canopy, less than undergrowth
+    const palmCount = Math.floor(terrainSize * terrainSize * palmDensity);
+    
+    console.log(`🌴 PALM GENERATION:`);
+    console.log(`- Generating ${palmCount} medium palm trees`);
+    
+    // Load palm textures
+    const coconutTexture = this.assetLoader?.getTexture('CoconutPalm');
+    const arecaTexture = this.assetLoader?.getTexture('ArecaPalmCluster');
+    
+    if (coconutTexture) {
+      // Coconut palms - prefer near water (edges for now)
+      const coconutCount = Math.floor(palmCount * 0.4);
+      this.billboardSystem.createBillboardType('coconut', coconutTexture, coconutCount, 5, 6);
+      
+      for (let i = 0; i < coconutCount; i++) {
+        // Bias towards edges (simulating water proximity)
+        const edgeBias = Math.random() < 0.6;
+        let x, z;
+        
+        if (edgeBias) {
+          // Place near edges
+          if (Math.random() < 0.5) {
+            x = Math.random() < 0.5 ? -halfSize + Math.random() * 20 : halfSize - Math.random() * 20;
+            z = MathUtils.randomInRange(-halfSize, halfSize);
+          } else {
+            x = MathUtils.randomInRange(-halfSize, halfSize);
+            z = Math.random() < 0.5 ? -halfSize + Math.random() * 20 : halfSize - Math.random() * 20;
+          }
+        } else {
+          x = MathUtils.randomInRange(-halfSize + 10, halfSize - 10);
+          z = MathUtils.randomInRange(-halfSize + 10, halfSize - 10);
+        }
+        
+        const position = new THREE.Vector3(
+          x,
+          this.terrain.getHeightAt(x, z) + 2.5,
+          z
+        );
+        
+        const scale = new THREE.Vector3(
+          MathUtils.randomInRange(4, 5),
+          MathUtils.randomInRange(5, 6),
+          1
+        );
+        
+        this.billboardSystem.addInstance('coconut', {
+          position,
+          scale,
+          rotation: MathUtils.randomInRange(0, Math.PI * 2)
+        });
+      }
+    }
+    
+    if (arecaTexture) {
+      // Areca palm clusters - everywhere
+      const arecaCount = palmCount - Math.floor(palmCount * 0.4);
+      this.billboardSystem.createBillboardType('areca', arecaTexture, arecaCount, 4, 5);
+      
+      // Use moderate Poisson spacing
+      const points = MathUtils.poissonDiskSampling(terrainSize, terrainSize, 8);
+      
+      for (let i = 0; i < Math.min(arecaCount, points.length); i++) {
+        const point = points[i];
+        const position = new THREE.Vector3(
+          point.x - halfSize,
+          this.terrain.getHeightAt(point.x - halfSize, point.y - halfSize) + 2,
+          point.y - halfSize
+        );
+        
+        const scale = new THREE.Vector3(
+          MathUtils.randomInRange(3.5, 4.5),
+          MathUtils.randomInRange(4, 5.5),
+          1
+        );
+        
+        this.billboardSystem.addInstance('areca', {
+          position,
+          scale,
+          rotation: MathUtils.randomInRange(0, Math.PI * 2)
+        });
+      }
+    }
+    
+    console.log(`✅ Palm layer complete`);
+  }
+  
+  private generateUndergrowth(): void {
+    const terrainSize = this.config.terrainSize;
+    const halfSize = terrainSize / 2;
+    
+    // Dense undergrowth
+    const undergrowthDensity = 0.08; // Very dense for jungle floor
+    const undergrowthCount = Math.floor(terrainSize * terrainSize * undergrowthDensity);
+    
+    console.log(`🌿 UNDERGROWTH GENERATION:`);
+    console.log(`- Generating ${undergrowthCount} undergrowth plants`);
+    
+    // Load undergrowth textures
+    const fernTexture = this.assetLoader?.getTexture('Fern');
+    const fanPalmTexture = this.assetLoader?.getTexture('FanPalmCluster');
+    const elephantEarTexture = this.assetLoader?.getTexture('ElephantEarPlants');
+    
+    const textures = [
+      { texture: fernTexture, name: 'fern', weight: 0.4 },
+      { texture: fanPalmTexture, name: 'fanpalm', weight: 0.3 },
+      { texture: elephantEarTexture, name: 'elephantear', weight: 0.3 }
+    ].filter(t => t.texture);
+    
+    // Create billboard types for each undergrowth
+    textures.forEach(t => {
+      const count = Math.floor(undergrowthCount * t.weight);
+      this.billboardSystem.createBillboardType(t.name, t.texture!, count, 1.5, 2.5);
+    });
+    
+    // Random distribution for dense undergrowth
+    let totalPlaced = 0;
+    textures.forEach(t => {
+      const count = Math.floor(undergrowthCount * t.weight);
+      
+      for (let i = 0; i < count; i++) {
+        const position = MathUtils.randomVector3(
+          -halfSize + 2, halfSize - 2,
+          -halfSize + 2, halfSize - 2,
+          0
+        );
+        position.y = this.terrain.getHeightAt(position.x, position.z) + 0.5;
+        
+        const scale = new THREE.Vector3(
+          MathUtils.randomInRange(1, 2),
+          MathUtils.randomInRange(1.5, 2.5),
+          1
+        );
+        
+        this.billboardSystem.addInstance(t.name, {
+          position,
+          scale,
+          rotation: MathUtils.randomInRange(0, Math.PI * 2)
+        });
+        totalPlaced++;
+      }
+    });
+    
+    console.log(`✅ Undergrowth complete: ${totalPlaced} plants`);
+  }
+  
   private generateGrass(grassTexture: THREE.Texture): void {
     const terrainSize = this.config.terrainSize;
     const halfSize = terrainSize / 2;

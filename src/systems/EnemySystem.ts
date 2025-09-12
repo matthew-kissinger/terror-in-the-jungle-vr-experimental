@@ -6,7 +6,7 @@ import { ImprovedChunkManager } from './ImprovedChunkManager';
 
 interface Enemy {
   id: string;
-  type: 'zombie' | 'goblin' | 'imp' | 'ghast';
+  type: 'zombie' | 'goblin' | 'imp' | 'ghast' | 'soldier';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotation: number;
@@ -16,8 +16,8 @@ interface Enemy {
   billboardIndex?: number;
   // Faction-specific properties
   hordeId?: string; // For zombies
-  packId?: string;  // For goblins
-  packRole?: 'leader' | 'follower'; // For goblins
+  packId?: string;  // For goblins and soldiers
+  packRole?: 'leader' | 'follower'; // For goblins and soldiers
   detectionRadius: number;
   moveSpeed: number;
   isChasing: boolean;
@@ -26,6 +26,11 @@ interface Enemy {
   isFlying?: boolean;
   targetHeight?: number;
   floatPhase?: number; // For sinusoidal floating motion
+  // Soldier specific
+  soldierState?: 'walking' | 'alert' | 'firing';
+  alertTimer?: number;
+  hasLineOfSight?: boolean;
+  currentTexture?: THREE.Texture;
 }
 
 export class EnemySystem implements GameSystem {
@@ -40,6 +45,8 @@ export class EnemySystem implements GameSystem {
   private goblinMesh?: THREE.InstancedMesh;
   private impMesh?: THREE.InstancedMesh;
   private ghastMesh?: THREE.InstancedMesh;
+  private soldierMeshes: Map<string, THREE.InstancedMesh> = new Map(); // One mesh per soldier state
+  private soldierTextures: Map<string, THREE.Texture> = new Map();
   private nextEnemyId = 0;
   private nextHordeId = 0;
   private nextPackId = 0;
@@ -49,7 +56,7 @@ export class EnemySystem implements GameSystem {
   private packs: Map<string, string[]> = new Map();  // packId -> enemyIds
   
   // Spawn settings
-  private readonly MAX_ENEMIES = 50; // Increased to match instance capacity
+  private readonly MAX_ENEMIES = 60; // Increased for more soldiers
   private readonly SPAWN_RADIUS = 60;  // Increased spawn radius
   private readonly MIN_SPAWN_DISTANCE = 20;
   private readonly DESPAWN_DISTANCE = 120;  // Much larger despawn distance
@@ -60,12 +67,17 @@ export class EnemySystem implements GameSystem {
   private readonly GOBLIN_SPEED = 7;
   private readonly IMP_SPEED = 5;
   private readonly GHAST_SPEED = 4;
+  private readonly SOLDIER_SPEED_WALKING = 4;
+  private readonly SOLDIER_SPEED_ALERT = 6;
+  private readonly SOLDIER_SPEED_FIRING = 2; // Slower when aiming
   
   // Detection ranges
   private readonly ZOMBIE_DETECTION = 20;
   private readonly GOBLIN_DETECTION = 30;
   private readonly IMP_DETECTION = 15;
   private readonly GHAST_DETECTION = 40; // Can see far from the sky
+  private readonly SOLDIER_DETECTION = 25;
+  private readonly SOLDIER_FIRING_RANGE = 20; // Line of sight range
   
   // Player tracking
   private playerPosition = new THREE.Vector3();
@@ -103,6 +115,15 @@ export class EnemySystem implements GameSystem {
     const goblinTexture = this.assetLoader.getTexture('goblin');
     const impTexture = this.assetLoader.getTexture('imp');
     const ghastTexture = this.assetLoader.getTexture('flying_monster');
+    
+    // Load soldier textures
+    const soldierWalkingTexture = this.assetLoader.getTexture('SoliderWalking');
+    const soldierAlertTexture = this.assetLoader.getTexture('SoldierAlert');
+    const soldierFiringTexture = this.assetLoader.getTexture('SoliderFiring');
+    
+    if (soldierWalkingTexture) this.soldierTextures.set('walking', soldierWalkingTexture);
+    if (soldierAlertTexture) this.soldierTextures.set('alert', soldierAlertTexture);
+    if (soldierFiringTexture) this.soldierTextures.set('firing', soldierFiringTexture);
     
     if (!zombieTexture || !goblinTexture || !impTexture || !ghastTexture) {
       console.warn('⚠️ Some enemy textures not found');
@@ -183,38 +204,94 @@ export class EnemySystem implements GameSystem {
       this.ghastMesh.renderOrder = 2; // Render above other enemies
       this.scene.add(this.ghastMesh);
     }
+    
+    // Create soldier billboard types - one mesh per state for efficiency
+    if (soldierWalkingTexture && soldierAlertTexture && soldierFiringTexture) {
+      const soldierGeometry = new THREE.PlaneGeometry(5, 7);
+      
+      // Walking state mesh
+      const walkingMaterial = new THREE.MeshBasicMaterial({
+        map: soldierWalkingTexture,
+        transparent: true,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: true
+      });
+      const walkingMesh = new THREE.InstancedMesh(soldierGeometry, walkingMaterial, 30);
+      walkingMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      walkingMesh.frustumCulled = false;
+      walkingMesh.count = 0;
+      walkingMesh.renderOrder = 1;
+      this.scene.add(walkingMesh);
+      this.soldierMeshes.set('walking', walkingMesh);
+      
+      // Alert state mesh
+      const alertMaterial = new THREE.MeshBasicMaterial({
+        map: soldierAlertTexture,
+        transparent: true,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: true
+      });
+      const alertMesh = new THREE.InstancedMesh(soldierGeometry, alertMaterial, 30);
+      alertMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      alertMesh.frustumCulled = false;
+      alertMesh.count = 0;
+      alertMesh.renderOrder = 1;
+      this.scene.add(alertMesh);
+      this.soldierMeshes.set('alert', alertMesh);
+      
+      // Firing state mesh
+      const firingMaterial = new THREE.MeshBasicMaterial({
+        map: soldierFiringTexture,
+        transparent: true,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: true
+      });
+      const firingMesh = new THREE.InstancedMesh(soldierGeometry, firingMaterial, 30);
+      firingMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      firingMesh.frustumCulled = false;
+      firingMesh.count = 0;
+      firingMesh.renderOrder = 1;
+      this.scene.add(firingMesh);
+      this.soldierMeshes.set('firing', firingMesh);
+      
+      console.log('🪖 Soldier meshes created for all states');
+    }
   }
 
   private spawnInitialEnemies(): void {
-    // Spawn zombie hordes closer to player
-    this.spawnZombieHorde(new THREE.Vector3(15, 0, 15));
-    this.spawnZombieHorde(new THREE.Vector3(-20, 0, 10));
+    // Spawn soldier squads - primary enemy type
+    this.spawnSoldierSquad(new THREE.Vector3(20, 0, 20));
+    this.spawnSoldierSquad(new THREE.Vector3(-25, 0, 15));
+    this.spawnSoldierSquad(new THREE.Vector3(15, 0, -20));
     
-    // Spawn goblin packs  
-    this.spawnGoblinPack(new THREE.Vector3(10, 0, -15));
-    this.spawnGoblinPack(new THREE.Vector3(-15, 0, -10));
+    // Spawn reduced zombie hordes
+    this.spawnZombieHorde(new THREE.Vector3(30, 0, 30));
     
-    // Spawn individual imps
-    for (let i = 0; i < 3; i++) {
+    // Spawn reduced goblin pack
+    this.spawnGoblinPack(new THREE.Vector3(-30, 0, -25));
+    
+    // Spawn fewer individual imps
+    for (let i = 0; i < 2; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 10 + Math.random() * 15;
+      const distance = 15 + Math.random() * 20;
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       const y = this.getTerrainHeight(x, z) + 3;
       this.spawnEnemy(new THREE.Vector3(x, y, z), 'imp');
     }
     
-    // Spawn flying ghasts
-    for (let i = 0; i < 2; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 20 + Math.random() * 30;
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance;
-      const y = 30 + Math.random() * 20; // High in the sky (30-50 units)
-      this.spawnEnemy(new THREE.Vector3(x, y, z), 'ghast');
-    }
+    // Spawn single flying ghast
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 25 + Math.random() * 25;
+    const x = Math.cos(angle) * distance;
+    const z = Math.sin(angle) * distance;
+    const y = 35 + Math.random() * 15; // High in the sky
+    this.spawnEnemy(new THREE.Vector3(x, y, z), 'ghast');
     
-    console.log('👹 Spawned initial enemy groups');
+    console.log('🪖 Terror in the Jungle: Initial forces deployed');
   }
   
   private spawnZombieHorde(centerPos: THREE.Vector3): void {
@@ -258,6 +335,29 @@ export class EnemySystem implements GameSystem {
     
     this.packs.set(packId, enemyIds);
     console.log(`👺 Spawned goblin pack ${packId} with ${packSize} goblins`);
+  }
+  
+  private spawnSoldierSquad(centerPos: THREE.Vector3): void {
+    const squadId = `squad_${this.nextPackId++}`;
+    const squadSize = Math.floor(Math.random() * 3) + 3; // 3-5 soldiers
+    const enemyIds: string[] = [];
+    
+    for (let i = 0; i < squadSize; i++) {
+      // Formation spread
+      const offset = new THREE.Vector3(
+        (Math.random() - 0.5) * 10,
+        0,
+        (Math.random() - 0.5) * 10
+      );
+      const position = centerPos.clone().add(offset);
+      position.y = this.getTerrainHeight(position.x, position.z) + 3;
+      const packRole = i === 0 ? 'leader' : 'follower';
+      const enemyId = this.spawnEnemy(position, 'soldier', { packId: squadId, packRole });
+      if (enemyId) enemyIds.push(enemyId);
+    }
+    
+    this.packs.set(squadId, enemyIds);
+    console.log(`🪖 Deployed soldier squad ${squadId} with ${squadSize} soldiers`);
   }
 
   update(deltaTime: number): void {
@@ -303,21 +403,25 @@ export class EnemySystem implements GameSystem {
       
       const position = new THREE.Vector3(x, y, z);
       
-      // Spawn different enemy types with different probabilities
+      // Spawn different enemy types with adjusted probabilities
       const rand = Math.random();
-      if (rand < 0.35) {
-        // 35% chance: Spawn zombie horde
-        this.spawnZombieHorde(position);
+      if (rand < 0.45) {
+        // 45% chance: Spawn soldier squad (primary enemy)
+        this.spawnSoldierSquad(position);
         break; // Only spawn one group at a time
       } else if (rand < 0.6) {
-        // 25% chance: Spawn goblin pack
+        // 15% chance: Spawn zombie horde
+        this.spawnZombieHorde(position);
+        break;
+      } else if (rand < 0.75) {
+        // 15% chance: Spawn goblin pack
         this.spawnGoblinPack(position);
         break;
-      } else if (rand < 0.85) {
-        // 25% chance: Spawn individual imp
+      } else if (rand < 0.9) {
+        // 15% chance: Spawn individual imp
         this.spawnEnemy(position, 'imp');
       } else {
-        // 15% chance: Spawn flying ghast high in the sky
+        // 10% chance: Spawn flying ghast high in the sky
         const ghastY = 30 + Math.random() * 25;
         position.y = ghastY;
         this.spawnEnemy(position, 'ghast');
@@ -325,7 +429,7 @@ export class EnemySystem implements GameSystem {
     }
   }
 
-  private spawnEnemy(position: THREE.Vector3, type: 'zombie' | 'goblin' | 'imp' | 'ghast', groupData?: { hordeId?: string; packId?: string; packRole?: 'leader' | 'follower' }): string {
+  private spawnEnemy(position: THREE.Vector3, type: 'zombie' | 'goblin' | 'imp' | 'ghast' | 'soldier', groupData?: { hordeId?: string; packId?: string; packRole?: 'leader' | 'follower' }): string {
     const id = `enemy_${this.nextEnemyId++}`;
     
     // Set properties based on enemy type
@@ -349,6 +453,10 @@ export class EnemySystem implements GameSystem {
         moveSpeed = this.GHAST_SPEED;
         detectionRadius = this.GHAST_DETECTION;
         break;
+      case 'soldier':
+        moveSpeed = this.SOLDIER_SPEED_WALKING;
+        detectionRadius = this.SOLDIER_DETECTION;
+        break;
     }
     
     const enemy: Enemy = {
@@ -366,6 +474,10 @@ export class EnemySystem implements GameSystem {
       isFlying: type === 'ghast',
       targetHeight: type === 'ghast' ? position.y : undefined,
       floatPhase: type === 'ghast' ? Math.random() * Math.PI * 2 : undefined,
+      soldierState: type === 'soldier' ? 'walking' : undefined,
+      alertTimer: type === 'soldier' ? 0 : undefined,
+      hasLineOfSight: false,
+      currentTexture: type === 'soldier' ? this.soldierTextures.get('walking') : undefined,
       ...groupData
     };
     
@@ -397,6 +509,9 @@ export class EnemySystem implements GameSystem {
         break;
       case 'ghast':
         this.updateGhast(enemy, deltaTime);
+        break;
+      case 'soldier':
+        this.updateSoldier(enemy, deltaTime);
         break;
     }
     
@@ -585,6 +700,128 @@ export class EnemySystem implements GameSystem {
       enemy.targetHeight = 25 + Math.random() * 15;
     }
   }
+  
+  private updateSoldier(enemy: Enemy, deltaTime: number): void {
+    const distanceToPlayer = enemy.position.distanceTo(this.playerPosition);
+    
+    // Check line of sight (simplified - just check distance and no obstacles)
+    const hasLOS = distanceToPlayer <= this.SOLDIER_FIRING_RANGE;
+    enemy.hasLineOfSight = hasLOS;
+    
+    // State machine for soldiers
+    switch (enemy.soldierState) {
+      case 'walking':
+        // Patrol behavior
+        if (distanceToPlayer <= enemy.detectionRadius) {
+          // Transition to alert
+          enemy.soldierState = 'alert';
+          enemy.alertTimer = 0;
+          enemy.currentTexture = this.soldierTextures.get('alert');
+          enemy.moveSpeed = this.SOLDIER_SPEED_ALERT;
+          
+          // Alert squad members
+          if (enemy.packId) {
+            const squadMembers = this.packs.get(enemy.packId);
+            if (squadMembers) {
+              squadMembers.forEach(id => {
+                const squadMate = this.enemies.get(id);
+                if (squadMate && squadMate.type === 'soldier' && squadMate.soldierState === 'walking') {
+                  squadMate.soldierState = 'alert';
+                  squadMate.alertTimer = 0;
+                  squadMate.currentTexture = this.soldierTextures.get('alert');
+                  squadMate.moveSpeed = this.SOLDIER_SPEED_ALERT;
+                }
+              });
+            }
+          }
+        } else {
+          // Patrol in formation
+          enemy.timeToDirectionChange -= deltaTime;
+          if (enemy.timeToDirectionChange <= 0) {
+            enemy.wanderAngle = Math.random() * Math.PI * 2;
+            enemy.timeToDirectionChange = 3 + Math.random() * 2;
+          }
+          
+          enemy.velocity.set(
+            Math.cos(enemy.wanderAngle) * enemy.moveSpeed,
+            0,
+            Math.sin(enemy.wanderAngle) * enemy.moveSpeed
+          );
+        }
+        break;
+        
+      case 'alert':
+        enemy.alertTimer! += deltaTime;
+        
+        // Check for line of sight
+        if (hasLOS && enemy.alertTimer! > 0.5) { // Small delay before firing
+          // Transition to firing
+          enemy.soldierState = 'firing';
+          enemy.currentTexture = this.soldierTextures.get('firing');
+          enemy.moveSpeed = this.SOLDIER_SPEED_FIRING;
+        } else if (distanceToPlayer > enemy.detectionRadius * 1.5) {
+          // Lost target, return to patrol
+          enemy.soldierState = 'walking';
+          enemy.currentTexture = this.soldierTextures.get('walking');
+          enemy.moveSpeed = this.SOLDIER_SPEED_WALKING;
+        } else {
+          // Move towards player quickly
+          const toPlayer = new THREE.Vector3()
+            .subVectors(this.playerPosition, enemy.position)
+            .normalize();
+          
+          // Squad tactics - spread out when approaching
+          if (enemy.packRole === 'follower' && enemy.packId) {
+            const offset = Math.PI / 6 * (Math.random() > 0.5 ? 1 : -1);
+            const spreadDir = new THREE.Vector3(
+              toPlayer.x * Math.cos(offset) - toPlayer.z * Math.sin(offset),
+              0,
+              toPlayer.x * Math.sin(offset) + toPlayer.z * Math.cos(offset)
+            );
+            enemy.velocity.set(
+              spreadDir.x * enemy.moveSpeed,
+              0,
+              spreadDir.z * enemy.moveSpeed
+            );
+          } else {
+            enemy.velocity.set(
+              toPlayer.x * enemy.moveSpeed,
+              0,
+              toPlayer.z * enemy.moveSpeed
+            );
+          }
+        }
+        break;
+        
+      case 'firing':
+        // Face player and fire
+        const toPlayerFiring = new THREE.Vector3()
+          .subVectors(this.playerPosition, enemy.position)
+          .normalize();
+        
+        // Slow movement while firing
+        enemy.velocity.set(
+          toPlayerFiring.x * enemy.moveSpeed * 0.3,
+          0,
+          toPlayerFiring.z * enemy.moveSpeed * 0.3
+        );
+        
+        // Check if should stop firing
+        if (!hasLOS) {
+          // Lost line of sight, go back to alert
+          enemy.soldierState = 'alert';
+          enemy.currentTexture = this.soldierTextures.get('alert');
+          enemy.moveSpeed = this.SOLDIER_SPEED_ALERT;
+          enemy.alertTimer = 0;
+        } else if (distanceToPlayer > enemy.detectionRadius * 1.5) {
+          // Target too far, return to walking
+          enemy.soldierState = 'walking';
+          enemy.currentTexture = this.soldierTextures.get('walking');
+          enemy.moveSpeed = this.SOLDIER_SPEED_WALKING;
+        }
+        break;
+    }
+  }
 
   private updateBillboards(): void {
     const dummy = new THREE.Object3D();
@@ -596,6 +833,12 @@ export class EnemySystem implements GameSystem {
     let impIndex = 0;
     let ghastIndex = 0;
     let skippedZombies = 0;
+    
+    // Track soldier indices per state
+    const soldierIndices = new Map<string, number>();
+    soldierIndices.set('walking', 0);
+    soldierIndices.set('alert', 0);
+    soldierIndices.set('firing', 0);
     
     this.enemies.forEach(enemy => {
       // Calculate rotation to face camera
@@ -632,6 +875,15 @@ export class EnemySystem implements GameSystem {
         this.ghastMesh.setMatrixAt(ghastIndex, dummy.matrix);
         enemy.billboardIndex = ghastIndex;
         ghastIndex++;
+      } else if (enemy.type === 'soldier' && enemy.soldierState) {
+        const stateMesh = this.soldierMeshes.get(enemy.soldierState);
+        const stateIndex = soldierIndices.get(enemy.soldierState) || 0;
+        
+        if (stateMesh && stateIndex < 30) { // Check capacity
+          stateMesh.setMatrixAt(stateIndex, dummy.matrix);
+          enemy.billboardIndex = stateIndex;
+          soldierIndices.set(enemy.soldierState, stateIndex + 1);
+        }
       }
     });
     
@@ -658,6 +910,13 @@ export class EnemySystem implements GameSystem {
       this.ghastMesh.count = ghastIndex;
       this.ghastMesh.instanceMatrix.needsUpdate = true;
     }
+    
+    // Update soldier meshes for each state
+    this.soldierMeshes.forEach((mesh, state) => {
+      const count = soldierIndices.get(state) || 0;
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+    });
   }
 
   private removeEnemy(id: string): void {
@@ -689,6 +948,14 @@ export class EnemySystem implements GameSystem {
       this.scene.remove(this.ghastMesh);
       this.ghastMesh.dispose();
     }
+    
+    // Clean up soldier meshes
+    this.soldierMeshes.forEach(mesh => {
+      this.scene.remove(mesh);
+      mesh.dispose();
+    });
+    this.soldierMeshes.clear();
+    this.soldierTextures.clear();
     
     this.enemies.clear();
     console.log('🧹 Enemy System disposed');
