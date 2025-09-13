@@ -25,6 +25,7 @@ interface Enemy {
   alertTimer?: number;
   hasLineOfSight?: boolean;
   currentTexture?: THREE.Texture;
+  health?: number;
 }
 
 export class EnemySystem implements GameSystem {
@@ -258,6 +259,7 @@ export class EnemySystem implements GameSystem {
       alertTimer: 0,
       hasLineOfSight: false,
       currentTexture: this.soldierTextures.get('walking'),
+      health: 100,
       ...groupData
     };
     
@@ -497,6 +499,56 @@ export class EnemySystem implements GameSystem {
     }
     
     this.enemies.delete(id);
+  }
+
+  /**
+   * Simple ray-sphere intersection against enemies to simulate hitscan.
+   * Returns closest hit within maxDistance.
+   */
+  raycastEnemy(ray: THREE.Ray, maxDistance = 150): { enemy: Enemy; distance: number; point: THREE.Vector3; headshot: boolean } | null {
+    let closest: { enemy: Enemy; distance: number; point: THREE.Vector3; headshot: boolean } | null = null;
+    const tmp = new THREE.Vector3();
+    this.enemies.forEach((enemy) => {
+      if (enemy.type !== 'soldier') return;
+      // approximate as sphere
+      const radius = 1.4; // body radius
+      const toCenter = tmp.subVectors(enemy.position, ray.origin);
+      const t = toCenter.dot(ray.direction);
+      if (t < 0 || t > maxDistance) return;
+      const closestPoint = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.direction, t);
+      const distSq = closestPoint.distanceToSquared(enemy.position);
+      if (distSq > radius * radius) return;
+      // intersection distance along ray (approx. using t)
+      const distance = t;
+      if (!closest || distance < closest.distance) {
+        // headshot heuristic: point higher than shoulder line
+        const headshot = closestPoint.y >= enemy.position.y + 2.2;
+        closest = { enemy, distance, point: closestPoint, headshot };
+      }
+    });
+    return closest;
+  }
+
+  applyDamage(enemy: Enemy, amount: number): void {
+    enemy.health = (enemy.health ?? 100) - amount;
+    if (enemy.health! <= 0) {
+      this.removeEnemy(enemy.id);
+    }
+  }
+
+  /**
+   * Handle hitscan shot: raycast enemies and apply damage via provided damage function.
+   */
+  handleHitscan(ray: THREE.Ray, computeDamage: (distance: number, isHeadshot: boolean) => number, maxDistance = 150): { hit: boolean; point: THREE.Vector3 } {
+    const hit = this.raycastEnemy(ray, maxDistance);
+    if (hit) {
+      const dmg = computeDamage(hit.distance, hit.headshot);
+      this.applyDamage(hit.enemy, dmg);
+      return { hit: true, point: hit.point };
+    }
+    // Miss: return end point far away for tracer visuals
+    const end = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.direction, maxDistance);
+    return { hit: false, point: end };
   }
 
   private getTerrainHeight(x: number, z: number): number {

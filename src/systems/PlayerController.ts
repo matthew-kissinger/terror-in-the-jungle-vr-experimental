@@ -1,14 +1,11 @@
 import * as THREE from 'three';
 import { GameSystem, PlayerState } from '../types';
 import { MathUtils } from '../utils/Math';
-import { Terrain } from './Terrain';
-import { ChunkManager } from './ChunkManager';
 import { ImprovedChunkManager } from './ImprovedChunkManager';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
-  private terrain: Terrain;
-  private chunkManager?: ChunkManager | ImprovedChunkManager;
+  private chunkManager?: ImprovedChunkManager;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -19,9 +16,8 @@ export class PlayerController implements GameSystem {
   private yaw = 0;
   private maxPitch = Math.PI / 2 - 0.1; // Prevent full vertical rotation
 
-  constructor(camera: THREE.PerspectiveCamera, terrain: Terrain) {
+  constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
-    this.terrain = terrain;
     
     this.playerState = {
       position: new THREE.Vector3(0, 5, 10), // BACK TO ORIGINAL POSITION
@@ -191,16 +187,11 @@ export class PlayerController implements GameSystem {
     // No bounds clamping for infinite world
     // Remove the old terrain bounds limitation
 
-    // Check ground collision using ChunkManager if available, otherwise use flat terrain
-    let groundHeight = 2; // Default player height above ground
-    
+    // Check ground collision using ImprovedChunkManager if available, otherwise use flat baseline
+    let groundHeight = 2; // Default player height above ground (flat world fallback)
     if (this.chunkManager) {
-      // Use chunk-based terrain height
       const terrainHeight = this.chunkManager.getHeightAt(newPosition.x, newPosition.z);
-      groundHeight = terrainHeight + 2; // Player height above terrain
-    } else {
-      // Fallback to flat terrain for compatibility
-      groundHeight = this.terrain.getHeightAt(newPosition.x, newPosition.z) + 2;
+      groundHeight = terrainHeight + 2;
     }
     
     if (newPosition.y <= groundHeight) {
@@ -238,6 +229,12 @@ export class PlayerController implements GameSystem {
     this.camera.position.copy(this.playerState.position);
   }
 
+  // Apply recoil to camera by adjusting internal yaw/pitch so effect persists
+  applyRecoil(pitchDeltaRad: number, yawDeltaRad: number): void {
+    this.pitch = MathUtils.clamp(this.pitch + pitchDeltaRad, -this.maxPitch, this.maxPitch);
+    this.yaw += yawDeltaRad;
+  }
+
   private showControls(): void {
     console.log(`
 🎮 CONTROLS:
@@ -266,7 +263,7 @@ Escape - Release pointer lock
     this.playerState.velocity.set(0, 0, 0);
   }
 
-  setChunkManager(chunkManager: ChunkManager | ImprovedChunkManager): void {
+  setChunkManager(chunkManager: ImprovedChunkManager): void {
     this.chunkManager = chunkManager;
   }
 }

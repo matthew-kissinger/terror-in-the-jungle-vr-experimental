@@ -3,9 +3,7 @@ import './style.css';
 
 // Import our game systems
 import { AssetLoader } from './systems/AssetLoader';
-import { Terrain } from './systems/Terrain';
-import { BillboardSystem } from './systems/Billboard';
-import { WorldGenerator } from './systems/WorldGenerator';
+// Legacy systems removed: Terrain, BillboardSystem, WorldGenerator
 import { PlayerController } from './systems/PlayerController';
 // import { EnemyAI } from './systems/EnemyAI'; // Deprecated - using EnemySystem now
 import { EnemySystem } from './systems/EnemySystem';
@@ -25,11 +23,8 @@ class PixelArtSandbox {
   
   // Game systems
   private assetLoader!: AssetLoader;
-  private terrain!: Terrain;
   private chunkManager!: ImprovedChunkManager;
-  private billboardSystem!: BillboardSystem;
   private globalBillboardSystem!: GlobalBillboardSystem;
-  private worldGenerator!: WorldGenerator;
   private playerController!: PlayerController;
   // private enemyAI!: EnemyAI; // Deprecated - using EnemySystem now
   private enemySystem!: EnemySystem;
@@ -73,6 +68,20 @@ class PixelArtSandbox {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     
     document.body.appendChild(this.renderer.domElement);
+
+    // Simple crosshair
+    const crosshair = document.createElement('div');
+    crosshair.style.position = 'fixed';
+    crosshair.style.left = '50%';
+    crosshair.style.top = '50%';
+    crosshair.style.transform = 'translate(-50%, -50%)';
+    crosshair.style.width = '4px';
+    crosshair.style.height = '4px';
+    crosshair.style.background = '#ff3333';
+    crosshair.style.borderRadius = '50%';
+    crosshair.style.pointerEvents = 'none';
+    crosshair.style.zIndex = '10';
+    document.body.appendChild(crosshair);
   }
 
   private setupLighting(): void {
@@ -119,10 +128,7 @@ class PixelArtSandbox {
       this.chunkManager = new ImprovedChunkManager(this.scene, this.camera, this.assetLoader, this.globalBillboardSystem);
       
       // Keep original systems for fallback compatibility
-      this.terrain = new Terrain(this.scene);
-      this.billboardSystem = new BillboardSystem(this.scene, this.camera);
-      this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain, this.assetLoader);
-      this.playerController = new PlayerController(this.camera, this.terrain);
+      this.playerController = new PlayerController(this.camera);
       // this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain); // Deprecated
       this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
@@ -133,6 +139,7 @@ class PixelArtSandbox {
       this.playerController.setChunkManager(this.chunkManager);
       this.enemySystem.setChunkManager(this.chunkManager);
       this.firstPersonWeapon.setPlayerController(this.playerController);
+      this.firstPersonWeapon.setEnemySystem(this.enemySystem);
 
       // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
@@ -161,7 +168,7 @@ class PixelArtSandbox {
         console.log('☁️ Skybox created');
       }
 
-      // Skip old world building - chunks will generate dynamically
+      // Chunks generate dynamically via ImprovedChunkManager
       console.log('🌍 World system ready for dynamic chunk loading...');
 
       this.isInitialized = true;
@@ -174,44 +181,15 @@ class PixelArtSandbox {
   }
 
   private async loadGameAssets(): Promise<void> {
-    // Assets are automatically discovered by AssetLoader
-    const forestTexture = this.assetLoader.getTexture('forestfloor');
-    const grassTexture = this.assetLoader.getTexture('grass');
-    const treeTexture = this.assetLoader.getTexture('tree');
+    // Assets are auto-discovered by AssetLoader; ensure critical ones exist but don't hard-fail
     const skyboxTexture = this.assetLoader.getTexture('skybox');
-
-    if (!forestTexture || !grassTexture || !treeTexture || !skyboxTexture) {
-      throw new Error('Failed to load required textures');
+    if (!skyboxTexture) {
+      console.warn('Skybox texture missing; proceeding without skybox.');
     }
-
-    console.log('📦 All assets loaded successfully');
+    console.log('📦 Asset check complete');
   }
 
-  private async buildWorld(): Promise<void> {
-    // BACK TO ORIGINAL WORKING WORLD GENERATION
-    console.log('🌍 Building world...');
-    
-    // Create terrain
-    const forestTexture = this.assetLoader.getTexture('forestfloor')!;
-    this.terrain.createTerrain(forestTexture);
-
-    // Generate jungle world vegetation
-    // Pass dummy textures since we use AssetLoader internally now
-    const grassTexture = this.assetLoader.getTexture('grass') || new THREE.Texture();
-    const treeTexture = this.assetLoader.getTexture('tree') || new THREE.Texture();
-    this.worldGenerator.generateWorld(grassTexture, treeTexture);
-
-    // Old enemy spawning - disabled (now handled by EnemySystem)
-    // const impTexture = this.assetLoader.getTexture('imp')!;
-    // const enemySpawns = this.worldGenerator.generateEnemySpawns();
-    // this.enemyAI.initializeEnemies(impTexture, impTexture, enemySpawns);
-
-    // Create skybox
-    const skyboxTexture = this.assetLoader.getTexture('skybox')!;
-    this.skybox.createSkybox(skyboxTexture);
-
-    console.log('🌲 Original world generation complete');
-  }
+  // Legacy buildWorld removed; generation handled by chunk manager and billboard system
 
   private onWindowResize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight;
