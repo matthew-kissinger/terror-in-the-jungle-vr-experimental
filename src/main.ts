@@ -7,7 +7,7 @@ import { Terrain } from './systems/Terrain';
 import { BillboardSystem } from './systems/Billboard';
 import { WorldGenerator } from './systems/WorldGenerator';
 import { PlayerController } from './systems/PlayerController';
-import { EnemyAI } from './systems/EnemyAI';
+// import { EnemyAI } from './systems/EnemyAI'; // Deprecated - using EnemySystem now
 import { EnemySystem } from './systems/EnemySystem';
 import { Skybox } from './systems/Skybox';
 import { ImprovedChunkManager } from './systems/ImprovedChunkManager';
@@ -31,7 +31,7 @@ class PixelArtSandbox {
   private globalBillboardSystem!: GlobalBillboardSystem;
   private worldGenerator!: WorldGenerator;
   private playerController!: PlayerController;
-  private enemyAI!: EnemyAI;
+  // private enemyAI!: EnemyAI; // Deprecated - using EnemySystem now
   private enemySystem!: EnemySystem;
   private skybox!: Skybox;
   private waterSystem!: WaterSystem;
@@ -123,7 +123,7 @@ class PixelArtSandbox {
       this.billboardSystem = new BillboardSystem(this.scene, this.camera);
       this.worldGenerator = new WorldGenerator(this.billboardSystem, this.terrain, this.assetLoader);
       this.playerController = new PlayerController(this.camera, this.terrain);
-      this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain);
+      // this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain); // Deprecated
       this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
       this.waterSystem = new WaterSystem(this.scene, this.assetLoader);
@@ -178,10 +178,9 @@ class PixelArtSandbox {
     const forestTexture = this.assetLoader.getTexture('forestfloor');
     const grassTexture = this.assetLoader.getTexture('grass');
     const treeTexture = this.assetLoader.getTexture('tree');
-    const impTexture = this.assetLoader.getTexture('imp');
     const skyboxTexture = this.assetLoader.getTexture('skybox');
 
-    if (!forestTexture || !grassTexture || !treeTexture || !impTexture || !skyboxTexture) {
+    if (!forestTexture || !grassTexture || !treeTexture || !skyboxTexture) {
       throw new Error('Failed to load required textures');
     }
 
@@ -202,10 +201,10 @@ class PixelArtSandbox {
     const treeTexture = this.assetLoader.getTexture('tree') || new THREE.Texture();
     this.worldGenerator.generateWorld(grassTexture, treeTexture);
 
-    // Spawn enemies
-    const impTexture = this.assetLoader.getTexture('imp')!;
-    const enemySpawns = this.worldGenerator.generateEnemySpawns();
-    this.enemyAI.initializeEnemies(impTexture, impTexture, enemySpawns); // Using imp texture for both temporarily
+    // Old enemy spawning - disabled (now handled by EnemySystem)
+    // const impTexture = this.assetLoader.getTexture('imp')!;
+    // const enemySpawns = this.worldGenerator.generateEnemySpawns();
+    // this.enemyAI.initializeEnemies(impTexture, impTexture, enemySpawns);
 
     // Create skybox
     const skyboxTexture = this.assetLoader.getTexture('skybox')!;

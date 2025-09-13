@@ -37,17 +37,7 @@ export class AssetLoader implements GameSystem {
       'ElephantEarPlants.png',
       // Legacy trees (kept for compatibility)
       'tree.png',
-      'tree1.png',
-      'tree2.png', 
-      'tree3.png',
       'grass.png',
-      'mushroom.png',
-      'wheat.png',
-      // Enemies
-      'imp.png',
-      'zombie.png',
-      'goblin.png',
-      'flying_monster.png',
       // Soldier sprites
       'SoliderWalking.png',
       'SoldierAlert.png',
@@ -56,9 +46,6 @@ export class AssetLoader implements GameSystem {
       'first-person.png',
       // Environment
       'skybox.png',
-      'skybox2.png',
-      'skybox3.png',
-      'skybox4.png',
       'waternormals.jpg'
     ];
 
@@ -84,14 +71,13 @@ export class AssetLoader implements GameSystem {
       return AssetCategory.GROUND;
     }
     // Expanded foliage detection for jungle assets
-    if (name.includes('tree') || name.includes('grass') || name.includes('mushroom') || name.includes('wheat') ||
+    if (name.includes('tree') || name.includes('grass') ||
         name.includes('dipterocarp') || name.includes('banyan') || name.includes('palm') || 
         name.includes('fern') || name.includes('elephant')) {
       return AssetCategory.FOLIAGE;
     }
-    // Expanded enemy detection including soldiers
-    if (name.includes('imp') || name.includes('enemy') || name.includes('zombie') || name.includes('goblin') ||
-        name.includes('soldier') || name.includes('solider') || name.includes('flying_monster')) {
+    // Enemy detection for soldiers only
+    if (name.includes('soldier') || name.includes('solider')) {
       return AssetCategory.ENEMY;
     }
     if (name.includes('skybox') || name.includes('sky')) {

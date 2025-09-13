@@ -25,7 +25,7 @@ export class ImprovedChunkManager implements GameSystem {
   private globalBillboardSystem: GlobalBillboardSystem;
   
   // Chunk storage
-  private chunks: Map<string, Chunk> = new Map();
+  private chunks: Map<string, ImprovedChunk> = new Map();
   private loadingChunks: Set<string> = new Set();
   private loadQueue: Array<{x: number, z: number, priority: number}> = [];
   
@@ -324,7 +324,7 @@ export class ImprovedChunkManager implements GameSystem {
     return this.chunks.size;
   }
 
-  getChunkAt(worldPos: THREE.Vector3): Chunk | undefined {
+  getChunkAt(worldPos: THREE.Vector3): ImprovedChunk | undefined {
     const chunkCoord = this.worldToChunkCoord(worldPos);
     const key = this.getChunkKey(chunkCoord.x, chunkCoord.y);
     return this.chunks.get(key);

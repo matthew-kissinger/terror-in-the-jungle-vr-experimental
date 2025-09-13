@@ -261,10 +261,6 @@ Escape - Release pointer lock
     return this.playerState.velocity.length() > 0.1;
   }
 
-  isMoving(): boolean {
-    return this.playerState.velocity.length() > 0.1;
-  }
-
   teleport(position: THREE.Vector3): void {
     this.playerState.position.copy(position);
     this.playerState.velocity.set(0, 0, 0);
