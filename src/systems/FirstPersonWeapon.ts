@@ -16,6 +16,7 @@ export class FirstPersonWeapon implements GameSystem {
   private camera: THREE.Camera;
   private assetLoader: AssetLoader;
   private playerController?: PlayerController;
+  private gameStarted: boolean = false;
   
   // Weapon sprite
   private weaponScene: THREE.Scene;
@@ -202,6 +203,9 @@ export class FirstPersonWeapon implements GameSystem {
 
   
   private onMouseDown(event: MouseEvent): void {
+    // Don't process input until game has started and weapon is visible
+    if (!this.gameStarted || !this.isEnabled || !this.weaponRig) return;
+
     if (event.button === 2) {
       // Right mouse - ADS toggle hold
       this.isADS = true;
@@ -396,5 +400,10 @@ export class FirstPersonWeapon implements GameSystem {
     if (this.weaponRig) {
       this.weaponRig.visible = true;
     }
+  }
+
+  // Set game started state
+  setGameStarted(started: boolean): void {
+    this.gameStarted = started;
   }
 }

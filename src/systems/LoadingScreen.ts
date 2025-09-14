@@ -22,6 +22,9 @@ export class LoadingScreen {
   private playButton: HTMLButtonElement;
   private settingsButton: HTMLButtonElement;
   private howToPlayButton: HTMLButtonElement;
+  private settingsPanel: HTMLDivElement;
+  private howToPlayPanel: HTMLDivElement;
+  private transitionOverlay: HTMLDivElement;
 
   private phases: Map<string, LoadingPhase> = new Map();
   private currentPhase: string = '';
@@ -71,6 +74,9 @@ export class LoadingScreen {
     this.playButton = this.container.querySelector('.play-button') as HTMLButtonElement;
     this.settingsButton = this.container.querySelector('.settings-button') as HTMLButtonElement;
     this.howToPlayButton = this.container.querySelector('.how-to-play-button') as HTMLButtonElement;
+    this.settingsPanel = this.createSettingsPanel();
+    this.howToPlayPanel = this.createHowToPlayPanel();
+    this.transitionOverlay = this.createTransitionOverlay();
 
     this.initializePhases();
     this.setupEventListeners();
@@ -328,19 +334,32 @@ export class LoadingScreen {
   private setupEventListeners(): void {
     this.playButton.addEventListener('click', () => {
       if (this.onPlayCallback) {
-        this.onPlayCallback();
+        this.startGameTransition();
+        // Give transition time to play before starting game
+        setTimeout(() => {
+          if (this.onPlayCallback) this.onPlayCallback();
+        }, 500);
       }
     });
 
     this.settingsButton.addEventListener('click', () => {
-      if (this.onSettingsCallback) {
-        this.onSettingsCallback();
-      }
+      this.showSettingsPanel();
     });
 
     this.howToPlayButton.addEventListener('click', () => {
-      if (this.onHowToPlayCallback) {
-        this.onHowToPlayCallback();
+      this.showHowToPlayPanel();
+    });
+
+    // Close panels when clicking outside
+    this.settingsPanel.addEventListener('click', (e) => {
+      if (e.target === this.settingsPanel) {
+        this.hideSettingsPanel();
+      }
+    });
+
+    this.howToPlayPanel.addEventListener('click', (e) => {
+      if (e.target === this.howToPlayPanel) {
+        this.hideHowToPlayPanel();
       }
     });
   }
@@ -414,9 +433,267 @@ export class LoadingScreen {
   }
 
   public hide(): void {
-    this.container.classList.add('hidden');
+    // Don't hide immediately - transition handles it
     setTimeout(() => {
+      this.container.classList.add('hidden');
       this.isVisible = false;
+    }, 1500);
+  }
+
+  private createSettingsPanel(): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.className = 'settings-panel';
+    panel.style.cssText = `
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      z-index: 10001;
+      justify-content: center;
+      align-items: center;
+    `;
+
+    panel.innerHTML = `
+      <div style="
+        background: linear-gradient(135deg, #1a2f1a 0%, #0d1a0d 100%);
+        border: 2px solid #4a7c4e;
+        border-radius: 10px;
+        padding: 30px;
+        max-width: 500px;
+        color: #c4b5a0;
+        font-family: 'Courier New', monospace;
+      ">
+        <h2 style="color: #8fbc8f; margin-bottom: 20px;">SETTINGS</h2>
+
+        <div style="margin: 15px 0;">
+          <label style="display: block; margin-bottom: 5px;">Graphics Quality</label>
+          <select style="width: 100%; padding: 5px; background: rgba(0,0,0,0.5); color: #c4b5a0; border: 1px solid #4a7c4e;">
+            <option>Low</option>
+            <option selected>Medium</option>
+            <option>High</option>
+            <option>Ultra</option>
+          </select>
+        </div>
+
+        <div style="margin: 15px 0;">
+          <label style="display: block; margin-bottom: 5px;">Master Volume</label>
+          <input type="range" min="0" max="100" value="70" style="width: 100%;">
+        </div>
+
+        <div style="margin: 15px 0;">
+          <label style="display: block; margin-bottom: 5px;">Mouse Sensitivity</label>
+          <input type="range" min="1" max="10" value="5" style="width: 100%;">
+        </div>
+
+        <div style="margin: 15px 0;">
+          <label>
+            <input type="checkbox" checked> Show FPS Counter
+          </label>
+        </div>
+
+        <div style="margin: 15px 0;">
+          <label>
+            <input type="checkbox" checked> Enable Shadows
+          </label>
+        </div>
+
+        <button class="close-settings" style="
+          margin-top: 20px;
+          padding: 10px 30px;
+          background: linear-gradient(135deg, #2d4a2b 0%, #4a7c4e 100%);
+          color: white;
+          border: 2px solid #4a7c4e;
+          border-radius: 5px;
+          cursor: pointer;
+          font-family: 'Courier New', monospace;
+        ">CLOSE</button>
+      </div>
+    `;
+
+    document.body.appendChild(panel);
+
+    const closeBtn = panel.querySelector('.close-settings');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hideSettingsPanel());
+    }
+
+    return panel;
+  }
+
+  private createHowToPlayPanel(): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.className = 'how-to-play-panel';
+    panel.style.cssText = `
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      z-index: 10001;
+      justify-content: center;
+      align-items: center;
+      overflow-y: auto;
+    `;
+
+    panel.innerHTML = `
+      <div style="
+        background: linear-gradient(135deg, #1a2f1a 0%, #0d1a0d 100%);
+        border: 2px solid #4a7c4e;
+        border-radius: 10px;
+        padding: 30px;
+        max-width: 600px;
+        color: #c4b5a0;
+        font-family: 'Courier New', monospace;
+        margin: 20px;
+      ">
+        <h2 style="color: #8fbc8f; margin-bottom: 20px;">HOW TO PLAY</h2>
+
+        <h3 style="color: #708070; margin-top: 20px;">CONTROLS</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li>⌨️ WASD - Move</li>
+          <li>⌨️ SHIFT - Sprint</li>
+          <li>⌨️ SPACE - Jump</li>
+          <li>🖱️ MOUSE - Look around</li>
+          <li>🖱️ LEFT CLICK - Fire weapon</li>
+          <li>🖱️ RIGHT CLICK - Aim down sights</li>
+          <li>⌨️ ESC - Release mouse lock</li>
+        </ul>
+
+        <h3 style="color: #708070; margin-top: 20px;">OBJECTIVE</h3>
+        <p>Capture and hold zones to drain enemy tickets. The team that runs out of tickets first loses!</p>
+
+        <h3 style="color: #708070; margin-top: 20px;">ZONES</h3>
+        <p>Stand in neutral or enemy zones to capture them. More teammates in a zone = faster capture!</p>
+
+        <h3 style="color: #708070; margin-top: 20px;">COMBAT TIPS</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li>🎯 Headshots deal 70% more damage</li>
+          <li>🌲 Use vegetation for cover</li>
+          <li>👂 Listen for enemy gunfire</li>
+          <li>🏃 Stay mobile to avoid being hit</li>
+        </ul>
+
+        <button class="close-how-to-play" style="
+          margin-top: 20px;
+          padding: 10px 30px;
+          background: linear-gradient(135deg, #2d4a2b 0%, #4a7c4e 100%);
+          color: white;
+          border: 2px solid #4a7c4e;
+          border-radius: 5px;
+          cursor: pointer;
+          font-family: 'Courier New', monospace;
+        ">CLOSE</button>
+      </div>
+    `;
+
+    document.body.appendChild(panel);
+
+    const closeBtn = panel.querySelector('.close-how-to-play');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hideHowToPlayPanel());
+    }
+
+    return panel;
+  }
+
+  private createTransitionOverlay(): HTMLDivElement {
+    const overlay = document.createElement('div');
+    overlay.className = 'transition-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 10002;
+      display: none;
+      pointer-events: none;
+    `;
+
+    // Add scanline effect
+    overlay.innerHTML = `
+      <div class="scanlines" style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0,255,0,0.03),
+          rgba(0,255,0,0.03) 1px,
+          transparent 1px,
+          transparent 2px
+        );
+        pointer-events: none;
+        animation: scanlines 8s linear infinite;
+      "></div>
+      <style>
+        @keyframes scanlines {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(10px); }
+        }
+        @keyframes glitchDistortion {
+          0%, 100% { transform: scaleX(1) scaleY(1); filter: blur(0px); }
+          20% { transform: scaleX(1.02) scaleY(0.98); filter: blur(1px); }
+          40% { transform: scaleX(0.98) scaleY(1.01); filter: blur(0.5px); }
+          60% { transform: scaleX(1.01) scaleY(0.99); filter: blur(1.5px); }
+          80% { transform: scaleX(0.99) scaleY(1.02); filter: blur(0.8px); }
+        }
+        .transition-active {
+          animation: glitchDistortion 0.8s ease-out;
+        }
+      </style>
+    `;
+
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  private showSettingsPanel(): void {
+    this.settingsPanel.style.display = 'flex';
+  }
+
+  private hideSettingsPanel(): void {
+    this.settingsPanel.style.display = 'none';
+  }
+
+  private showHowToPlayPanel(): void {
+    this.howToPlayPanel.style.display = 'flex';
+  }
+
+  private hideHowToPlayPanel(): void {
+    this.howToPlayPanel.style.display = 'none';
+  }
+
+  private startGameTransition(): void {
+    // Simple fade to black transition
+    this.transitionOverlay.style.display = 'block';
+    this.transitionOverlay.style.opacity = '0';
+    this.transitionOverlay.style.transition = 'opacity 0.3s ease-in';
+
+    // Fade to black
+    setTimeout(() => {
+      this.transitionOverlay.style.opacity = '1';
+    }, 10);
+
+    // Add glitch effect to loading screen
+    this.container.style.transition = 'filter 0.3s ease-out';
+    this.container.style.filter = 'blur(5px) brightness(1.5)';
+
+    // After transition completes, fade back from black
+    setTimeout(() => {
+      this.transitionOverlay.style.transition = 'opacity 0.8s ease-out';
+      this.transitionOverlay.style.opacity = '0';
+      setTimeout(() => {
+        this.transitionOverlay.style.display = 'none';
+      }, 800);
     }, 500);
   }
 
@@ -440,6 +717,15 @@ export class LoadingScreen {
   public dispose(): void {
     if (this.container && this.container.parentElement) {
       this.container.parentElement.removeChild(this.container);
+    }
+    if (this.settingsPanel && this.settingsPanel.parentElement) {
+      this.settingsPanel.parentElement.removeChild(this.settingsPanel);
+    }
+    if (this.howToPlayPanel && this.howToPlayPanel.parentElement) {
+      this.howToPlayPanel.parentElement.removeChild(this.howToPlayPanel);
+    }
+    if (this.transitionOverlay && this.transitionOverlay.parentElement) {
+      this.transitionOverlay.parentElement.removeChild(this.transitionOverlay);
     }
   }
 

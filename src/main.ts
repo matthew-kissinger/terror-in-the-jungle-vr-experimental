@@ -267,10 +267,14 @@ class PixelArtSandbox {
         console.log('☁️ Skybox created');
       }
 
-      // Chunks generate dynamically via ImprovedChunkManager
-      console.log('🌍 World system ready for dynamic chunk loading...');
+      // Pre-generate spawn area chunks during loading
+      console.log('🌍 Pre-generating spawn area...');
+      const spawnPosition = new THREE.Vector3(0, 5, -50); // US Base spawn
+      await this.preGenerateSpawnArea(spawnPosition);
 
-      this.loadingScreen.updateProgress('entities', 1);
+      console.log('🌍 World system ready!');
+
+      this.loadingScreen.updateProgress('entities', 1)
 
       this.isInitialized = true;
       console.log('🚀 Pixel Art Sandbox ready!');
@@ -280,6 +284,33 @@ class PixelArtSandbox {
 
     } catch (error) {
       console.error('❌ Failed to initialize sandbox:', error);
+    }
+  }
+
+  private async preGenerateSpawnArea(spawnPos: THREE.Vector3): Promise<void> {
+    // Pre-generate chunks around spawn point to avoid black screen
+    const chunkSize = 64; // Default chunk size
+    const preloadRadius = 3; // Pre-load 3 chunks in each direction
+
+    const spawnChunkX = Math.floor(spawnPos.x / chunkSize);
+    const spawnChunkZ = Math.floor(spawnPos.z / chunkSize);
+
+    console.log(`Pre-generating ${(preloadRadius * 2 + 1) * (preloadRadius * 2 + 1)} chunks around spawn...`);
+
+    // Force chunk manager to load spawn area WITHOUT changing player position
+    if (this.chunkManager) {
+      // Temporarily set position for chunk loading but don't affect actual player
+      const tempPos = spawnPos.clone();
+      this.chunkManager.updatePlayerPosition(tempPos);
+
+      // Force an update cycle to load chunks
+      for (let i = 0; i < 5; i++) {
+        this.chunkManager.update(0.1);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Reset to actual player position after pre-loading
+      this.chunkManager.updatePlayerPosition(this.playerController.getPosition());
     }
   }
 
@@ -296,12 +327,29 @@ class PixelArtSandbox {
     if (!this.isInitialized || this.gameStarted) return;
 
     console.log('🎮 Starting game...');
+    this.gameStarted = true;
 
     // Hide loading screen with fade effect
     this.loadingScreen.hide();
 
     // Show renderer
     this.renderer.domElement.style.display = 'block';
+
+    // Small delay to ensure renderer is visible before enabling controls
+    setTimeout(() => {
+      // Enable weapon input now that game has started
+      if (this.firstPersonWeapon && typeof (this.firstPersonWeapon as any).setGameStarted === 'function') {
+        (this.firstPersonWeapon as any).setGameStarted(true);
+      }
+
+      // Enable player controller mouse lock
+      if (this.playerController && typeof (this.playerController as any).setGameStarted === 'function') {
+        (this.playerController as any).setGameStarted(true);
+      }
+
+      // Show instructions to click for mouse lock
+      console.log('🖱️ Click anywhere to enable mouse look!');
+    }, 100);
 
     // Delay combat start to give player time to orient
     setTimeout(() => {
@@ -330,7 +378,6 @@ class PixelArtSandbox {
     crosshair.style.zIndex = '10';
     document.body.appendChild(crosshair);
 
-    this.gameStarted = true;
     this.showWelcomeMessage();
   }
 

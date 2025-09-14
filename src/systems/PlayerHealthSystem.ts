@@ -477,10 +477,10 @@ export class PlayerHealthSystem implements GameSystem {
   }
 
   private respawnAtBase(): void {
-    if (!this.zoneManager) { this.respawn(new THREE.Vector3(0, 5, 0)); return; }
+    if (!this.zoneManager) { this.respawn(new THREE.Vector3(0, 5, -50)); return; }
     const usBase = this.zoneManager.getAllZones().find(z => z.id === 'us_base' || (z.isHomeBase && z.owner === Faction.US));
-    const basePos = usBase ? usBase.position.clone() : new THREE.Vector3(0, 0, -80);
-    basePos.y = (usBase ? usBase.position.y : 0) + 2; // stand above ground
+    const basePos = usBase ? usBase.position.clone() : new THREE.Vector3(0, 5, -50); // Consistent with PlayerController spawn
+    basePos.y = 5; // Consistent height with initial spawn
     this.respawn(basePos);
   }
 

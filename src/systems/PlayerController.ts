@@ -11,6 +11,7 @@ export class PlayerController implements GameSystem {
   private mouseMovement = { x: 0, y: 0 };
   private isPointerLocked = false;
   private isControlsEnabled = true; // For death system
+  private gameStarted = false; // Don't lock pointer until game starts
 
   // Camera settings
   private pitch = 0;
@@ -21,7 +22,7 @@ export class PlayerController implements GameSystem {
     this.camera = camera;
     
     this.playerState = {
-      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location
+      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location (consistent across all systems)
       velocity: new THREE.Vector3(0, 0, 0),
       speed: 10,
       runSpeed: 20,
@@ -62,9 +63,11 @@ export class PlayerController implements GameSystem {
     document.addEventListener('keyup', this.onKeyUp.bind(this));
 
     // Mouse events
-    document.addEventListener('click', this.requestPointerLock.bind(this));
     document.addEventListener('pointerlockchange', this.onPointerLockChange.bind(this));
     document.addEventListener('mousemove', this.onMouseMove.bind(this));
+
+    // Store bound function to avoid duplicate listeners
+    this.boundRequestPointerLock = this.requestPointerLock.bind(this);
 
     // Instructions for user
     this.showControls();
@@ -106,8 +109,23 @@ export class PlayerController implements GameSystem {
     }
   }
 
+  private boundRequestPointerLock?: () => void;
+
   private requestPointerLock(): void {
-    document.body.requestPointerLock();
+    if (this.gameStarted && !this.isPointerLocked) {
+      document.body.requestPointerLock();
+    }
+  }
+
+  setGameStarted(started: boolean): void {
+    this.gameStarted = started;
+    if (started && this.boundRequestPointerLock) {
+      // Remove any existing listener first
+      document.removeEventListener('click', this.boundRequestPointerLock);
+      // Add click listener for pointer lock
+      document.addEventListener('click', this.boundRequestPointerLock);
+      console.log('🎮 Game started - click to enable mouse look');
+    }
   }
 
   private onPointerLockChange(): void {

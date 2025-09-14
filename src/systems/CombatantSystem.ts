@@ -442,7 +442,7 @@ export class CombatantSystem implements GameSystem {
     // Don't process AI if combat not yet enabled
     if (!this.combatEnabled) {
       // Still update visuals but no AI behavior
-      this.updateCombatantBillboards();
+      // this.updateCombatantBillboards(); // Method doesn't exist - removed
       return;
     }
 
