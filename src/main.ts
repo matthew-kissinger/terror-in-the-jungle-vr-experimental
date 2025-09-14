@@ -5,14 +5,20 @@ import './style.css';
 import { AssetLoader } from './systems/AssetLoader';
 // Legacy systems removed: Terrain, BillboardSystem, WorldGenerator
 import { PlayerController } from './systems/PlayerController';
-// import { EnemyAI } from './systems/EnemyAI'; // Deprecated - using EnemySystem now
-import { EnemySystem } from './systems/EnemySystem';
+// import { EnemyAI } from './systems/EnemyAI'; // Deprecated - using CombatantSystem now
+// import { EnemySystem } from './systems/EnemySystem'; // Replaced with CombatantSystem
+import { CombatantSystem } from './systems/CombatantSystem';
 import { Skybox } from './systems/Skybox';
 import { ImprovedChunkManager } from './systems/ImprovedChunkManager';
 import { GlobalBillboardSystem } from './systems/GlobalBillboardSystem';
 import { PixelPerfectUtils } from './utils/PixelPerfect';
 import { WaterSystem } from './systems/WaterSystem';
 import { FirstPersonWeapon } from './systems/FirstPersonWeapon';
+import { ZoneManager } from './systems/ZoneManager';
+import { HUDSystem } from './systems/HUDSystem';
+import { TicketSystem } from './systems/TicketSystem';
+import { PlayerHealthSystem } from './systems/PlayerHealthSystem';
+import { MinimapSystem } from './systems/MinimapSystem';
 import { GameSystem } from './types';
 
 class PixelArtSandbox {
@@ -26,11 +32,17 @@ class PixelArtSandbox {
   private chunkManager!: ImprovedChunkManager;
   private globalBillboardSystem!: GlobalBillboardSystem;
   private playerController!: PlayerController;
-  // private enemyAI!: EnemyAI; // Deprecated - using EnemySystem now
-  private enemySystem!: EnemySystem;
+  // private enemyAI!: EnemyAI; // Deprecated - using CombatantSystem now
+  // private enemySystem!: EnemySystem; // Replaced with CombatantSystem
+  private combatantSystem!: CombatantSystem;
   private skybox!: Skybox;
   private waterSystem!: WaterSystem;
   private firstPersonWeapon!: FirstPersonWeapon;
+  private zoneManager!: ZoneManager;
+  private hudSystem!: HUDSystem;
+  private ticketSystem!: TicketSystem;
+  private playerHealthSystem!: PlayerHealthSystem;
+  private minimapSystem!: MinimapSystem;
 
   // Game state
   private clock = new THREE.Clock();
@@ -130,16 +142,39 @@ class PixelArtSandbox {
       // Keep original systems for fallback compatibility
       this.playerController = new PlayerController(this.camera);
       // this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain); // Deprecated
-      this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
+      // this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
+      this.combatantSystem = new CombatantSystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
       this.waterSystem = new WaterSystem(this.scene, this.assetLoader);
       this.firstPersonWeapon = new FirstPersonWeapon(this.scene, this.camera, this.assetLoader);
+      this.zoneManager = new ZoneManager(this.scene);
+      this.hudSystem = new HUDSystem();
+      this.ticketSystem = new TicketSystem();
+      this.playerHealthSystem = new PlayerHealthSystem();
+      this.minimapSystem = new MinimapSystem(this.camera);
       
       // Connect systems with chunk manager
       this.playerController.setChunkManager(this.chunkManager);
-      this.enemySystem.setChunkManager(this.chunkManager);
+      this.combatantSystem.setChunkManager(this.chunkManager);
       this.firstPersonWeapon.setPlayerController(this.playerController);
-      this.firstPersonWeapon.setEnemySystem(this.enemySystem);
+      this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
+      this.firstPersonWeapon.setHUDSystem(this.hudSystem); // Connect HUD to weapon for hit markers
+      this.hudSystem.setCombatantSystem(this.combatantSystem);
+      this.hudSystem.setZoneManager(this.zoneManager);
+      this.hudSystem.setTicketSystem(this.ticketSystem);
+      this.ticketSystem.setZoneManager(this.zoneManager);
+      this.combatantSystem.setTicketSystem(this.ticketSystem);
+      this.combatantSystem.setPlayerHealthSystem(this.playerHealthSystem);
+      this.combatantSystem.setZoneManager(this.zoneManager);
+      this.combatantSystem.setHUDSystem(this.hudSystem); // Connect HUD to combatant system for kill tracking
+      this.playerHealthSystem.setZoneManager(this.zoneManager);
+      this.playerHealthSystem.setTicketSystem(this.ticketSystem);
+      this.playerHealthSystem.setPlayerController(this.playerController); // Connect player controller for respawning
+      this.minimapSystem.setZoneManager(this.zoneManager);
+      this.minimapSystem.setCombatantSystem(this.combatantSystem);
+      this.zoneManager.setCombatantSystem(this.combatantSystem);
+      this.zoneManager.setCamera(this.camera);
+      this.zoneManager.setChunkManager(this.chunkManager);
 
       // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
@@ -149,7 +184,12 @@ class PixelArtSandbox {
         this.waterSystem,
         this.playerController,
         this.firstPersonWeapon,
-        this.enemySystem,
+        this.combatantSystem,
+        this.zoneManager,
+        this.ticketSystem,
+        this.playerHealthSystem,
+        this.minimapSystem,
+        this.hudSystem,
         this.skybox
       ];
 
@@ -205,7 +245,8 @@ class PixelArtSandbox {
     console.log(`Triangles: ${this.renderer.info.render.triangles}`);
     console.log(`Grass instances: ${debugInfo.grassUsed}/${this.globalBillboardSystem.getInstanceCount('grass')}`);
     console.log(`Tree instances: ${debugInfo.treeUsed}/${this.globalBillboardSystem.getInstanceCount('tree')}`);
-    console.log(`Enemies: ${this.enemySystem.getEnemyCount()}`);  
+    const stats = this.combatantSystem.getCombatStats();
+    console.log(`Combatants - US: ${stats.us}, OPFOR: ${stats.opfor}`);  
     console.log(`Chunks loaded: ${this.chunkManager.getLoadedChunkCount()}, Queue: ${this.chunkManager.getQueueSize()}, Loading: ${this.chunkManager.getLoadingCount()}`);
     console.log(`Chunks tracked: ${debugInfo.chunksTracked}`);
   }
@@ -219,7 +260,7 @@ class PixelArtSandbox {
 - ${debugInfo.grassUsed} grass instances allocated
 - ${debugInfo.treeUsed} tree instances allocated
 - ${this.chunkManager ? this.chunkManager.getLoadedChunkCount() : 0} chunks loaded
-- ${this.enemySystem ? this.enemySystem.getEnemyCount() : 0} enemies wandering around
+- ${this.combatantSystem ? `US: ${this.combatantSystem.getCombatStats().us}, OPFOR: ${this.combatantSystem.getCombatStats().opfor}` : '0'} combatants in battle
 - Global billboard system with centralized camera tracking
 - Dynamic chunk loading system
 - Equirectangular skybox

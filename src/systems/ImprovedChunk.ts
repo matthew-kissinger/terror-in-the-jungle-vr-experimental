@@ -97,6 +97,7 @@ export class ImprovedChunk {
       this.banyanInstances
     );
     
+    
     this.isGenerated = true;
     console.log(`✅ ImprovedChunk (${this.chunkX}, ${this.chunkZ}) generated`);
   }
@@ -235,6 +236,8 @@ export class ImprovedChunk {
       0,
       this.chunkZ * this.size + this.size / 2
     );
+    // Name the terrain mesh so other systems (e.g., ZoneManager) can raycast/find it
+    this.terrainMesh.name = `chunk_${this.chunkX},${this.chunkZ}_terrain`;
     this.terrainMesh.receiveShadow = true;
     
     // Store geometry reference for collision

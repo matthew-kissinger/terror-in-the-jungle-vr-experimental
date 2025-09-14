@@ -235,6 +235,15 @@ export class PlayerController implements GameSystem {
     this.yaw += yawDeltaRad;
   }
 
+  setPosition(position: THREE.Vector3): void {
+    this.playerState.position.copy(position);
+    this.camera.position.copy(position);
+    // Reset velocity to prevent carrying momentum
+    this.playerState.velocity.set(0, 0, 0);
+    this.playerState.isGrounded = false;
+    console.log(`Player teleported to ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+  }
+
   private showControls(): void {
     console.log(`
 🎮 CONTROLS:

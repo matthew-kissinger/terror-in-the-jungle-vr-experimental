@@ -38,10 +38,15 @@ export class AssetLoader implements GameSystem {
       // Legacy trees (kept for compatibility)
       'tree.png',
       'grass.png',
-      // Soldier sprites
-      'SoliderWalking.png',
-      'SoldierAlert.png',
-      'SoliderFiring.png',
+      // US Faction soldiers (prefixed with 'A')
+      'ASoldierWalking.png',
+      'ASoldierAlert.png',
+      'ASoldierFiring.png',
+      'ASoldierFlameThrower.png',
+      // OPFOR/Enemy soldiers
+      'EnemySoldierWalking.png',  // Renamed from SoliderWalking.png
+      'EnemySoldierAlert.png',     // Renamed from SoldierAlert.png
+      'EnemySoldierFiring.png',    // Renamed from SoliderFiring.png
       // UI/Player
       'first-person.png',
       // Environment
@@ -66,24 +71,25 @@ export class AssetLoader implements GameSystem {
 
   private categorizeAsset(filename: string): AssetCategory {
     const name = filename.toLowerCase();
-    
+
     if (name.includes('floor') || name.includes('ground')) {
       return AssetCategory.GROUND;
     }
     // Expanded foliage detection for jungle assets
     if (name.includes('tree') || name.includes('grass') ||
-        name.includes('dipterocarp') || name.includes('banyan') || name.includes('palm') || 
+        name.includes('dipterocarp') || name.includes('banyan') || name.includes('palm') ||
         name.includes('fern') || name.includes('elephant')) {
       return AssetCategory.FOLIAGE;
     }
-    // Enemy detection for soldiers only
+    // Soldier detection - all soldiers are categorized as ENEMY for now (will be distinguished by prefix)
+    // ASoldier* = US faction, Solider*/Soldier* = OPFOR faction
     if (name.includes('soldier') || name.includes('solider')) {
-      return AssetCategory.ENEMY;
+      return AssetCategory.ENEMY;  // Using ENEMY category for all combatants
     }
     if (name.includes('skybox') || name.includes('sky')) {
       return AssetCategory.SKYBOX;
     }
-    
+
     return AssetCategory.UNKNOWN;
   }
 

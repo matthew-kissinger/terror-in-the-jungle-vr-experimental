@@ -5,7 +5,8 @@ import { TracerPool } from './TracerPool';
 import { MuzzleFlashPool } from './MuzzleFlashPool';
 import { ImpactEffectsPool } from './ImpactEffectsPool';
 import { GunplayCore, WeaponSpec } from './GunplayCore';
-import { EnemySystem } from './EnemySystem';
+// import { EnemySystem } from './EnemySystem'; // Replaced with CombatantSystem
+import { CombatantSystem } from './CombatantSystem';
 import { AssetLoader } from './AssetLoader';
 import { PlayerController } from './PlayerController';
 
@@ -59,7 +60,9 @@ export class FirstPersonWeapon implements GameSystem {
     damageNear: 34, damageFar: 24, falloffStart: 20, falloffEnd: 60,
     headshotMultiplier: 1.7, penetrationPower: 1
   };
-  private enemySystem?: EnemySystem;
+  // private enemySystem?: EnemySystem;
+  private combatantSystem?: CombatantSystem;
+  private hudSystem?: any; // HUD system for hit markers
   
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -184,8 +187,13 @@ export class FirstPersonWeapon implements GameSystem {
     this.playerController = controller;
   }
 
-  setEnemySystem(enemy: EnemySystem): void {
-    this.enemySystem = enemy;
+  // Deprecated: Use setCombatantSystem instead
+  setEnemySystem(enemy: any): void {
+    console.warn('setEnemySystem is deprecated, use setCombatantSystem');
+  }
+
+  setCombatantSystem(combatantSystem: CombatantSystem): void {
+    this.combatantSystem = combatantSystem;
   }
 
   
@@ -296,21 +304,28 @@ export class FirstPersonWeapon implements GameSystem {
   }
   
   private tryFire(): void {
-    if (!this.enemySystem || !this.gunCore.canFire()) return;
+    if (!this.combatantSystem || !this.gunCore.canFire()) return;
     this.gunCore.registerShot();
 
     // Spread and recoil
     const spread = this.gunCore.getSpreadDeg();
     const ray = this.gunCore.computeShotRay(this.camera, spread);
 
-    // Hitscan damage application
-    const result = this.enemySystem.handleHitscan(ray, (d, head) => this.gunCore.computeDamage(d, head), 150);
+    // Hitscan damage application with enhanced result
+    const result = this.combatantSystem.handlePlayerShot(ray, (d, head) => this.gunCore.computeDamage(d, head));
 
     // Spawn impact effect at hit point
     if (result.hit) {
       // Calculate impact normal (opposite of ray direction for now)
       const normal = ray.direction.clone().negate();
       this.impactEffectsPool.spawn(result.point, normal);
+
+      // Show hit marker
+      if (this.hudSystem) {
+        // Check if it's a kill or normal hit
+        const hitType = (result as any).killed ? 'kill' : (result as any).headshot ? 'headshot' : 'normal';
+        this.hudSystem.showHitMarker(hitType);
+      }
     }
 
     // Spawn muzzle flash at the muzzle position
@@ -346,5 +361,9 @@ export class FirstPersonWeapon implements GameSystem {
       this.weaponRecoilVelocity.x += (Math.random() - 0.5) * 0.4;
     }
     (this as any).lastShotVisualTime = performance.now();
+  }
+
+  setHUDSystem(hudSystem: any): void {
+    this.hudSystem = hudSystem;
   }
 }
