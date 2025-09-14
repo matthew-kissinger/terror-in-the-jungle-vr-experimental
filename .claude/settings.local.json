@@ -46,7 +46,8 @@
       "Bash(findstr:*)",
       "Bash(npx:*)",
       "WebFetch(domain:mugen87.github.io)",
-      "Bash(choco install:*)"
+      "Bash(choco install:*)",
+      "Bash(del C:UsersMattmXpix3dsrcsystemsHelicopterIntro.ts)"
     ],
     "deny": [],
     "ask": []

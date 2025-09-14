@@ -41,6 +41,7 @@ export class PlayerHealthSystem implements GameSystem {
   private zoneManager?: ZoneManager;
   private ticketSystem?: TicketSystem;
   private playerController?: any;
+  private firstPersonWeapon?: any;
 
   // UI Elements
   private healthDisplay: HTMLDivElement;
@@ -470,10 +471,13 @@ export class PlayerHealthSystem implements GameSystem {
 
   private getSpawnableZones() {
     if (!this.zoneManager) return [] as Array<{ id: string; name: string; position: THREE.Vector3 }>;
-    return this.zoneManager
+    const zones = this.zoneManager
       .getAllZones()
-      .filter(z => z.state === ZoneState.US_CONTROLLED && !z.isHomeBase)
-      .map(z => ({ id: z.id, name: z.name, position: z.position.clone() }));
+      .filter(z => z.owner === Faction.US && !z.isHomeBase); // Use owner instead of state for more reliable filtering
+
+    console.log(`🚩 Found ${zones.length} spawnable zones:`, zones.map(z => `${z.name} (${z.state})`));
+
+    return zones.map(z => ({ id: z.id, name: z.name, position: z.position.clone() }));
   }
 
   private respawnAtBase(): void {
@@ -512,6 +516,11 @@ export class PlayerHealthSystem implements GameSystem {
       if (typeof this.playerController.enableControls === 'function') {
         this.playerController.enableControls();
       }
+    }
+
+    // Re-enable weapon on respawn
+    if (this.firstPersonWeapon && typeof this.firstPersonWeapon.enable === 'function') {
+      this.firstPersonWeapon.enable();
     }
     console.log(`🏥 Player respawned at ${position.x}, ${position.y}, ${position.z}`);
 
@@ -579,6 +588,11 @@ export class PlayerHealthSystem implements GameSystem {
     // Disable player controls
     if (this.playerController && typeof this.playerController.disableControls === 'function') {
       this.playerController.disableControls();
+    }
+
+    // Hide weapon on death
+    if (this.firstPersonWeapon && typeof this.firstPersonWeapon.disable === 'function') {
+      this.firstPersonWeapon.disable();
     }
 
     // Notify ticket system

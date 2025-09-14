@@ -15,14 +15,14 @@ export class PlayerController implements GameSystem {
 
   // Camera settings
   private pitch = 0;
-  private yaw = 0;
+  private yaw = Math.PI; // Face toward negative X (opposite of yaw=0)
   private maxPitch = Math.PI / 2 - 0.1; // Prevent full vertical rotation
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
     
     this.playerState = {
-      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location (consistent across all systems)
+      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location
       velocity: new THREE.Vector3(0, 0, 0),
       speed: 10,
       runSpeed: 20,

@@ -47,6 +47,7 @@ export class AssetLoader implements GameSystem {
       'EnemySoldierWalking.png',  // Renamed from SoliderWalking.png
       'EnemySoldierAlert.png',     // Renamed from SoldierAlert.png
       'EnemySoldierFiring.png',    // Renamed from SoliderFiring.png
+      'EnemySoldierBack.png',      // Back view of enemy soldier
       // UI/Player
       'first-person.png',
       // Environment

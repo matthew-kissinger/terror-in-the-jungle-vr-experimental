@@ -8,8 +8,7 @@ import { LoadingScreen } from './systems/LoadingScreen';
 import { AssetLoader } from './systems/AssetLoader';
 // Legacy systems removed: Terrain, BillboardSystem, WorldGenerator
 import { PlayerController } from './systems/PlayerController';
-// import { EnemyAI } from './systems/EnemyAI'; // Deprecated - using CombatantSystem now
-// import { EnemySystem } from './systems/EnemySystem'; // Replaced with CombatantSystem
+// Legacy systems removed - using unified CombatantSystem
 import { CombatantSystem } from './systems/CombatantSystem';
 import { Skybox } from './systems/Skybox';
 import { ImprovedChunkManager } from './systems/ImprovedChunkManager';
@@ -37,8 +36,7 @@ class PixelArtSandbox {
   private chunkManager!: ImprovedChunkManager;
   private globalBillboardSystem!: GlobalBillboardSystem;
   private playerController!: PlayerController;
-  // private enemyAI!: EnemyAI; // Deprecated - using CombatantSystem now
-  // private enemySystem!: EnemySystem; // Replaced with CombatantSystem
+  // Using unified CombatantSystem for all NPCs
   private combatantSystem!: CombatantSystem;
   private skybox!: Skybox;
   private waterSystem!: WaterSystem;
@@ -54,6 +52,7 @@ class PixelArtSandbox {
   private clock = new THREE.Clock();
   private isInitialized = false;
   private gameStarted = false;
+  private spawnLoadingDiv?: HTMLDivElement;
 
   constructor() {
     console.log('🎮 Initializing Pixel Art Sandbox Engine...');
@@ -222,6 +221,7 @@ class PixelArtSandbox {
       this.minimapSystem.setCombatantSystem(this.combatantSystem);
       this.zoneManager.setCombatantSystem(this.combatantSystem);
       this.zoneManager.setCamera(this.camera);
+      this.zoneManager.setChunkManager(this.chunkManager);
 
       // Connect audio manager
       this.firstPersonWeapon.setAudioManager(this.audioManager);
@@ -288,29 +288,39 @@ class PixelArtSandbox {
   }
 
   private async preGenerateSpawnArea(spawnPos: THREE.Vector3): Promise<void> {
-    // Pre-generate chunks around spawn point to avoid black screen
-    const chunkSize = 64; // Default chunk size
-    const preloadRadius = 3; // Pre-load 3 chunks in each direction
+    // Pre-generate chunks for BOTH faction bases
+    console.log(`Pre-generating spawn areas for both factions...`);
 
-    const spawnChunkX = Math.floor(spawnPos.x / chunkSize);
-    const spawnChunkZ = Math.floor(spawnPos.z / chunkSize);
-
-    console.log(`Pre-generating ${(preloadRadius * 2 + 1) * (preloadRadius * 2 + 1)} chunks around spawn...`);
-
-    // Force chunk manager to load spawn area WITHOUT changing player position
     if (this.chunkManager) {
-      // Temporarily set position for chunk loading but don't affect actual player
-      const tempPos = spawnPos.clone();
-      this.chunkManager.updatePlayerPosition(tempPos);
+      // First, generate US base chunks (where player spawns)
+      const usBasePos = new THREE.Vector3(0, 0, -50);
+      console.log('🇺🇸 Generating US base chunks...');
+      this.chunkManager.updatePlayerPosition(usBasePos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Force an update cycle to load chunks
-      for (let i = 0; i < 5; i++) {
-        this.chunkManager.update(0.1);
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+      // Then, generate OPFOR base chunks (moved back from Bravo zone)
+      const opforBasePos = new THREE.Vector3(0, 0, 145);
+      console.log('🚩 Generating OPFOR base chunks...');
+      this.chunkManager.updatePlayerPosition(opforBasePos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Reset to actual player position after pre-loading
-      this.chunkManager.updatePlayerPosition(this.playerController.getPosition());
+      // Generate middle battlefield chunks
+      const centerPos = new THREE.Vector3(0, 0, 50);
+      console.log('⚔️ Generating battlefield chunks...');
+      this.chunkManager.updatePlayerPosition(centerPos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Return to player spawn position
+      this.chunkManager.updatePlayerPosition(spawnPos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Now that ALL chunks are generated, create zones at proper heights
+      console.log('🚩 Initializing zones after chunk generation...');
+      this.zoneManager.initializeZones();
     }
   }
 
@@ -329,40 +339,52 @@ class PixelArtSandbox {
     console.log('🎮 Starting game...');
     this.gameStarted = true;
 
-    // Hide loading screen with fade effect
+    // Hide menu immediately
     this.loadingScreen.hide();
+
+    // Show loading indicator right away
+    this.showSpawnLoadingIndicator();
 
     // Show renderer
     this.renderer.domElement.style.display = 'block';
 
-    // Small delay to ensure renderer is visible before enabling controls
+    // Chunks are ALREADY generated from preGenerateSpawnArea during init!
+    // Just need to hide loading indicator after a brief moment
+    const startTime = performance.now();
+
     setTimeout(() => {
-      // Enable weapon input now that game has started
-      if (this.firstPersonWeapon && typeof (this.firstPersonWeapon as any).setGameStarted === 'function') {
-        (this.firstPersonWeapon as any).setGameStarted(true);
-      }
+      console.log(`Game ready in ${performance.now() - startTime}ms`);
 
-      // Enable player controller mouse lock
-      if (this.playerController && typeof (this.playerController as any).setGameStarted === 'function') {
-        (this.playerController as any).setGameStarted(true);
-      }
+      // Hide loading indicator
+      this.hideSpawnLoadingIndicator();
 
-      // Show instructions to click for mouse lock
-      console.log('🖱️ Click anywhere to enable mouse look!');
-    }, 100);
+            // Enable controls immediately
+            setTimeout(() => {
+        // Enable weapon input
+        if (this.firstPersonWeapon && typeof (this.firstPersonWeapon as any).setGameStarted === 'function') {
+          (this.firstPersonWeapon as any).setGameStarted(true);
+        }
 
-    // Delay combat start to give player time to orient
-    setTimeout(() => {
-      // Start ambient audio after a brief pause
-      if (this.audioManager) {
-        this.audioManager.startAmbient();
-      }
+        // Enable player controller and mouse lock
+        if (this.playerController && typeof (this.playerController as any).setGameStarted === 'function') {
+          (this.playerController as any).setGameStarted(true);
+        }
 
-      // Enable AI combat after player has control
-      if (this.combatantSystem && typeof this.combatantSystem.enableCombat === 'function') {
-        this.combatantSystem.enableCombat();
-      }
-    }, 1500); // 1.5 second delay before ambient audio and combat
+        // Show instructions to click for mouse lock
+        console.log('🖱️ Click anywhere to enable mouse look!');
+
+        // Start ambient audio
+        if (this.audioManager) {
+          this.audioManager.startAmbient();
+        }
+
+        // Enable AI combat immediately for instant action
+        if (this.combatantSystem && typeof this.combatantSystem.enableCombat === 'function') {
+          this.combatantSystem.enableCombat();
+          console.log('⚔️ Combat AI activated!');
+        }
+            }, 200);
+    }, 300); // Brief delay to show loading indicator
 
     // Show crosshair
     const crosshair = document.createElement('div');
@@ -455,9 +477,87 @@ Have fun!
     }
   }
 
+  private showSpawnLoadingIndicator(): void {
+    // Create loading indicator overlay
+    this.spawnLoadingDiv = document.createElement('div');
+    this.spawnLoadingDiv.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10003;
+      transition: opacity 0.5s ease-out;
+    `;
+
+    this.spawnLoadingDiv.innerHTML = `
+      <style>
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 1; }
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .loading-ring {
+          width: 60px;
+          height: 60px;
+          border: 3px solid rgba(74, 124, 78, 0.2);
+          border-top: 3px solid #4a7c4e;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        .loading-text {
+          color: #8fbc8f;
+          font-family: 'Courier New', monospace;
+          font-size: 18px;
+          margin-top: 20px;
+          animation: pulse 2s ease-in-out infinite;
+        }
+        .loading-tip {
+          color: #708070;
+          font-family: 'Courier New', monospace;
+          font-size: 14px;
+          margin-top: 10px;
+          max-width: 400px;
+          text-align: center;
+        }
+      </style>
+      <div class="loading-ring"></div>
+      <div class="loading-text">DEPLOYING TO BATTLEFIELD</div>
+      <div class="loading-tip">Generating terrain and preparing combat zone...</div>
+    `;
+
+    document.body.appendChild(this.spawnLoadingDiv);
+  }
+
+  private hideSpawnLoadingIndicator(): void {
+    if (this.spawnLoadingDiv) {
+      // Fade out
+      this.spawnLoadingDiv.style.opacity = '0';
+      setTimeout(() => {
+        if (this.spawnLoadingDiv && this.spawnLoadingDiv.parentElement) {
+          this.spawnLoadingDiv.parentElement.removeChild(this.spawnLoadingDiv);
+          this.spawnLoadingDiv = undefined;
+        }
+      }, 500);
+    }
+  }
+
   public dispose(): void {
     // Clean up loading screen
     this.loadingScreen.dispose();
+
+    // Clean up spawn loading indicator if present
+    if (this.spawnLoadingDiv && this.spawnLoadingDiv.parentElement) {
+      this.spawnLoadingDiv.parentElement.removeChild(this.spawnLoadingDiv);
+    }
 
     // Clean up all systems
     for (const system of this.systems) {

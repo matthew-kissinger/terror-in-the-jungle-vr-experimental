@@ -49,6 +49,8 @@ export interface Combatant {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotation: number;
+  visualRotation: number; // Smoothed rotation for rendering
+  rotationVelocity: number; // For smooth rotation transitions
   scale: THREE.Vector3;
 
   // Combat properties
@@ -141,6 +143,9 @@ export class CombatantSystem implements GameSystem {
   private readonly DESPAWN_DISTANCE = 150;
   private lastSpawnCheck = 0;
   private readonly SPAWN_CHECK_INTERVAL = 3000;
+  private readonly PROGRESSIVE_SPAWN_DELAY = 1000; // ms between progressive spawns
+  private progressiveSpawnTimer = 0;
+  private progressiveSpawnQueue: Array<{faction: Faction, position: THREE.Vector3, size: number}> = [];
 
   // Combat parameters
   private readonly FRIENDLY_FIRE_ENABLED = false;
@@ -181,7 +186,7 @@ export class CombatantSystem implements GameSystem {
     // Create billboard meshes for each faction and state
     await this.createFactionBillboards();
 
-    // Spawn initial forces
+    // Spawn initial forces - they'll handle terrain collision automatically
     this.spawnInitialForces();
 
     console.log('✅ Combatant System initialized');
@@ -197,6 +202,7 @@ export class CombatantSystem implements GameSystem {
     const opforWalking = this.assetLoader.getTexture('EnemySoldierWalking');
     const opforAlert = this.assetLoader.getTexture('EnemySoldierAlert');
     const opforFiring = this.assetLoader.getTexture('EnemySoldierFiring');
+    const opforBack = this.assetLoader.getTexture('EnemySoldierBack');
 
     // Store textures
     if (usWalking) this.soldierTextures.set('US_walking', usWalking);
@@ -205,6 +211,7 @@ export class CombatantSystem implements GameSystem {
     if (opforWalking) this.soldierTextures.set('OPFOR_walking', opforWalking);
     if (opforAlert) this.soldierTextures.set('OPFOR_alert', opforAlert);
     if (opforFiring) this.soldierTextures.set('OPFOR_firing', opforFiring);
+    if (opforBack) this.soldierTextures.set('OPFOR_back', opforBack);
 
     // Create instanced meshes for each faction-state combination
     const soldierGeometry = new THREE.PlaneGeometry(5, 7);
@@ -235,44 +242,37 @@ export class CombatantSystem implements GameSystem {
     if (opforWalking) createFactionMesh(opforWalking, 'OPFOR_walking');
     if (opforAlert) createFactionMesh(opforAlert, 'OPFOR_alert');
     if (opforFiring) createFactionMesh(opforFiring, 'OPFOR_firing');
+    if (opforBack) createFactionMesh(opforBack, 'OPFOR_back');
 
     console.log('🎖️ Created faction-specific soldier meshes');
   }
 
   private spawnInitialForces(): void {
-    // Get initial player position for relative spawning
-    this.camera.getWorldPosition(this.playerPosition);
+    // Spawn forces at their actual bases for tactical gameplay
+    console.log('🎖️ Deploying forces at faction bases...');
 
-    // Spawn US forces spread around US base (z = -50)
-    // First squad: left flank
-    this.spawnSquad(Faction.US, new THREE.Vector3(
-      -25,
-      0,
-      -35
-    ), 5);
-    // Second squad: right flank
-    this.spawnSquad(Faction.US, new THREE.Vector3(
-      20,
-      0,
-      -40
-    ), 4);
+    // US forces spawn at US base (where player spawns)
+    const usBasePos = new THREE.Vector3(0, 0, -50);
+    this.spawnSquad(Faction.US, usBasePos, 4); // Initial squad at base
 
-    // Spawn OPFOR forces spread around their base (z = 150)
-    // Create defensive positions around OPFOR base
-    // First squad: left side
-    this.spawnSquad(Faction.OPFOR, new THREE.Vector3(
-      -30,
-      0,
-      130
-    ), 5);
-    // Second squad: right side
-    this.spawnSquad(Faction.OPFOR, new THREE.Vector3(
-      25,
-      0,
-      135
-    ), 5);
+    // OPFOR forces spawn at OPFOR base (moved back from Bravo zone)
+    const opforBasePos = new THREE.Vector3(0, 0, 145);
+    this.spawnSquad(Faction.OPFOR, opforBasePos, 4); // Initial squad at base
 
-    console.log(`🎖️ Initial forces deployed: ${this.combatants.size} combatants`);
+    // Queue reinforcements to spawn at bases over time
+    this.progressiveSpawnQueue = [
+      { faction: Faction.US, position: new THREE.Vector3(-15, 0, -50), size: 3 },
+      { faction: Faction.OPFOR, position: new THREE.Vector3(-15, 0, 145), size: 3 },
+      { faction: Faction.US, position: new THREE.Vector3(15, 0, -50), size: 3 },
+      { faction: Faction.OPFOR, position: new THREE.Vector3(15, 0, 145), size: 3 },
+      { faction: Faction.US, position: new THREE.Vector3(0, 0, -40), size: 2 },
+      { faction: Faction.OPFOR, position: new THREE.Vector3(0, 0, 155), size: 2 }
+    ];
+
+    console.log(`🎖️ Initial forces deployed at bases: ${this.combatants.size} combatants`);
+    console.log(`📋 ${this.progressiveSpawnQueue.length} reinforcement squads queued`);
+    console.log('⚔️ Tactical objective: Capture and hold zones!');
+    console.log('🏃‍♂️ Movement speeds: Zone-seeking 4 units/s, Combat 3 units/s, Squad formation 2-3 units/s');
   }
 
   private spawnSquad(faction: Faction, centerPos: THREE.Vector3, size: number): void {
@@ -338,12 +338,15 @@ export class CombatantSystem implements GameSystem {
       squadData?.squadRole || 'follower'
     );
 
+    const initialRotation = Math.random() * Math.PI * 2;
     const combatant: Combatant = {
       id,
       faction,
       position: position.clone(),
       velocity: new THREE.Vector3(),
-      rotation: Math.random() * Math.PI * 2,
+      rotation: initialRotation,
+      visualRotation: initialRotation, // Start with same rotation to avoid initial jump
+      rotationVelocity: 0,
       scale: new THREE.Vector3(1, 1, 1),
 
       health: 100,
@@ -389,8 +392,8 @@ export class CombatantSystem implements GameSystem {
         bloomPerShotDeg: 0.2,
         recoilPerShotDeg: 0.55,
         recoilHorizontalDeg: 0.3,
-        damageNear: 34,
-        damageFar: 24,
+        damageNear: 26,
+        damageFar: 18,
         falloffStart: 25,
         falloffEnd: 65,
         headshotMultiplier: 1.7,
@@ -416,17 +419,34 @@ export class CombatantSystem implements GameSystem {
   }
 
   private createSkillProfile(faction: Faction, role: 'leader' | 'follower'): AISkillProfile {
-    // Base profiles - can be tuned for difficulty
-    const baseProfile: AISkillProfile = {
-      reactionDelayMs: role === 'leader' ? 250 : 350,
-      aimJitterAmplitude: role === 'leader' ? 1.0 : 1.5,
-      burstLength: role === 'leader' ? 4 : 3,
-      burstPauseMs: role === 'leader' ? 600 : 800,
-      leadingErrorFactor: role === 'leader' ? 0.85 : 0.75,
-      suppressionResistance: role === 'leader' ? 0.7 : 0.5,
-      visualRange: 120,
-      fieldOfView: 120
-    };
+    // Faction-specific profiles for better balance
+    let baseProfile: AISkillProfile;
+
+    if (faction === Faction.OPFOR) {
+      // OPFOR gets better combat skills to balance US weapon advantages
+      baseProfile = {
+        reactionDelayMs: role === 'leader' ? 300 : 450, // Faster reactions than US
+        aimJitterAmplitude: role === 'leader' ? 0.8 : 1.2, // Better aim
+        burstLength: role === 'leader' ? 5 : 4, // Longer bursts
+        burstPauseMs: role === 'leader' ? 500 : 700, // Shorter pauses
+        leadingErrorFactor: role === 'leader' ? 0.9 : 0.8, // Better leading
+        suppressionResistance: role === 'leader' ? 0.8 : 0.6, // More resilient
+        visualRange: 130, // Better spotting range
+        fieldOfView: 130
+      };
+    } else {
+      // US forces (slightly worse skills to balance weapon advantages)
+      baseProfile = {
+        reactionDelayMs: role === 'leader' ? 350 : 500,
+        aimJitterAmplitude: role === 'leader' ? 1.0 : 1.4,
+        burstLength: role === 'leader' ? 4 : 3,
+        burstPauseMs: role === 'leader' ? 600 : 800,
+        leadingErrorFactor: role === 'leader' ? 0.85 : 0.75,
+        suppressionResistance: role === 'leader' ? 0.7 : 0.5,
+        visualRange: 120,
+        fieldOfView: 120
+      };
+    }
 
     // Add some randomization for variety
     baseProfile.reactionDelayMs += (Math.random() - 0.5) * 100;
@@ -439,15 +459,29 @@ export class CombatantSystem implements GameSystem {
     // Update player position
     this.camera.getWorldPosition(this.playerPosition);
 
-    // Don't process AI if combat not yet enabled
+    // Allow basic movement and visuals even if combat not enabled
+    // This prevents NPCs from getting stuck at spawn
     if (!this.combatEnabled) {
-      // Still update visuals but no AI behavior
-      // this.updateCombatantBillboards(); // Method doesn't exist - removed
+      // Still update positions and billboards for visual consistency
+      this.updateCombatants(deltaTime);
+      this.updateBillboards();
+      // Skip combat-specific updates
       return;
     }
 
     // Ensure player proxy exists and tracks player position
     this.ensurePlayerProxy();
+
+    // Progressive spawning from queue
+    if (this.progressiveSpawnQueue.length > 0) {
+      this.progressiveSpawnTimer += deltaTime * 1000;
+      if (this.progressiveSpawnTimer >= this.PROGRESSIVE_SPAWN_DELAY) {
+        this.progressiveSpawnTimer = 0;
+        const spawn = this.progressiveSpawnQueue.shift()!;
+        this.spawnSquad(spawn.faction, spawn.position, spawn.size);
+        console.log(`🎖️ Reinforcements: ${spawn.faction} squad of ${spawn.size} deployed`);
+      }
+    }
 
     // Check for spawning/despawning
     const now = Date.now();
@@ -477,6 +511,8 @@ export class CombatantSystem implements GameSystem {
         position: this.playerPosition.clone(),
         velocity: new THREE.Vector3(),
         rotation: 0,
+        visualRotation: 0,
+        rotationVelocity: 0,
         scale: new THREE.Vector3(1, 1, 1),
         health: 100,
         maxHealth: 100,
@@ -518,21 +554,21 @@ export class CombatantSystem implements GameSystem {
     sortedCombatants.forEach(combatant => {
       const distance = combatant.position.distanceTo(this.playerPosition);
 
-      // Determine LOD level
-      if (distance < 50) {
+      // Determine LOD level - much higher ranges to ensure fair AI processing
+      if (distance < 150) {
         combatant.lodLevel = 'high';
         this.updateCombatantFull(combatant, deltaTime);
-      } else if (distance < 100) {
+      } else if (distance < 300) {
         combatant.lodLevel = 'medium';
-        // Update at reduced frequency
-        if (now - combatant.lastUpdateTime > 66) { // 15fps
+        // Update at same frequency for fairness
+        if (now - combatant.lastUpdateTime > 50) { // 20fps
           this.updateCombatantMedium(combatant, deltaTime);
           combatant.lastUpdateTime = now;
         }
-      } else if (distance < 150) {
+      } else if (distance < 500) {
         combatant.lodLevel = 'low';
-        // Update rarely
-        if (now - combatant.lastUpdateTime > 200) { // 5fps
+        // Still decent update rate
+        if (now - combatant.lastUpdateTime > 100) { // 10fps
           this.updateCombatantBasic(combatant, deltaTime);
           combatant.lastUpdateTime = now;
         }
@@ -546,6 +582,7 @@ export class CombatantSystem implements GameSystem {
     this.updateCombatantMovement(combatant, deltaTime);
     this.updateCombatantCombat(combatant, deltaTime);
     this.updateCombatantTexture(combatant);
+    this.updateCombatantRotation(combatant, deltaTime);
   }
 
   private updateCombatantMedium(combatant: Combatant, deltaTime: number): void {
@@ -554,11 +591,13 @@ export class CombatantSystem implements GameSystem {
     this.updateCombatantMovement(combatant, deltaTime);
     // Allow combat at reduced frequency for medium LOD so AI can shoot the player
     this.updateCombatantCombat(combatant, deltaTime);
+    this.updateCombatantRotation(combatant, deltaTime);
   }
 
   private updateCombatantBasic(combatant: Combatant, deltaTime: number): void {
     // Minimal update for distant combatants
     this.updateCombatantMovement(combatant, deltaTime);
+    this.updateCombatantRotation(combatant, deltaTime);
   }
 
   private updateCombatantAI(combatant: Combatant, deltaTime: number): void {
@@ -946,10 +985,12 @@ export class CombatantSystem implements GameSystem {
           if (toLeader.length() > 6) {
             toLeader.normalize();
             combatant.velocity.set(
-              toLeader.x * 4,
+              toLeader.x * 3,
               0,
-              toLeader.z * 4
+              toLeader.z * 3
             );
+            // Update rotation to face movement direction
+            combatant.rotation = Math.atan2(toLeader.z, toLeader.x);
             return;
           }
         }
@@ -970,18 +1011,41 @@ export class CombatantSystem implements GameSystem {
       }
     }
 
-    // Wander movement
-    combatant.timeToDirectionChange -= deltaTime;
-    if (combatant.timeToDirectionChange <= 0) {
-      combatant.wanderAngle = Math.random() * Math.PI * 2;
-      combatant.timeToDirectionChange = 2 + Math.random() * 2;
-    }
+    // Fallback: If no zone to capture, advance toward enemy territory
+    if (combatant.squadRole === 'leader') {
+      // Move toward enemy base as fallback objective
+      const enemyBasePos = combatant.faction === Faction.US ?
+        new THREE.Vector3(0, 0, 145) : // OPFOR base
+        new THREE.Vector3(0, 0, -50); // US base
 
-    combatant.velocity.set(
-      Math.cos(combatant.wanderAngle) * 3,
-      0,
-      Math.sin(combatant.wanderAngle) * 3
-    );
+      const toEnemyBase = new THREE.Vector3()
+        .subVectors(enemyBasePos, combatant.position)
+        .normalize();
+
+      combatant.velocity.set(
+        toEnemyBase.x * 3,
+        0,
+        toEnemyBase.z * 3
+      );
+      combatant.rotation = Math.atan2(toEnemyBase.z, toEnemyBase.x);
+    } else {
+      // Followers: limited wander near leader
+      combatant.timeToDirectionChange -= deltaTime;
+      if (combatant.timeToDirectionChange <= 0) {
+        combatant.wanderAngle = Math.random() * Math.PI * 2;
+        combatant.timeToDirectionChange = 2 + Math.random() * 2;
+      }
+
+      combatant.velocity.set(
+        Math.cos(combatant.wanderAngle) * 2,
+        0,
+        Math.sin(combatant.wanderAngle) * 2
+      );
+    }
+    // Update rotation to match movement direction
+    if (combatant.velocity.length() > 0.1) {
+      combatant.rotation = Math.atan2(combatant.velocity.z, combatant.velocity.x);
+    }
   }
 
   private updateCombatMovement(combatant: Combatant, deltaTime: number): void {
@@ -998,15 +1062,15 @@ export class CombatantSystem implements GameSystem {
 
     if (distance > idealDistance + 10) {
       // Move closer
-      combatant.velocity.copy(toTarget).multiplyScalar(5);
+      combatant.velocity.copy(toTarget).multiplyScalar(3);
     } else if (distance < idealDistance - 10) {
       // Back up
-      combatant.velocity.copy(toTarget).multiplyScalar(-3);
+      combatant.velocity.copy(toTarget).multiplyScalar(-2);
     } else {
       // Strafe
       const strafeAngle = Math.sin(Date.now() * 0.001) * 0.5;
       const strafeDir = new THREE.Vector3(-toTarget.z, 0, toTarget.x);
-      combatant.velocity.copy(strafeDir).multiplyScalar(strafeAngle * 4);
+      combatant.velocity.copy(strafeDir).multiplyScalar(strafeAngle * 2);
     }
   }
 
@@ -1030,6 +1094,29 @@ export class CombatantSystem implements GameSystem {
     combatant.currentTexture = this.soldierTextures.get(textureKey);
   }
 
+  private updateCombatantRotation(combatant: Combatant, deltaTime: number): void {
+    // Smooth rotation interpolation
+    let targetRotation = combatant.rotation;
+
+    // Calculate shortest rotation path
+    let rotationDiff = targetRotation - combatant.visualRotation;
+
+    // Normalize to -PI to PI range
+    while (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
+    while (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
+
+    // Apply smooth interpolation with velocity for natural movement
+    const rotationAccel = rotationDiff * 15; // Spring constant
+    const rotationDamping = combatant.rotationVelocity * 10; // Damping
+
+    combatant.rotationVelocity += (rotationAccel - rotationDamping) * deltaTime;
+    combatant.visualRotation += combatant.rotationVelocity * deltaTime;
+
+    // Normalize visual rotation
+    while (combatant.visualRotation > Math.PI * 2) combatant.visualRotation -= Math.PI * 2;
+    while (combatant.visualRotation < 0) combatant.visualRotation += Math.PI * 2;
+  }
+
   private updateBillboards(): void {
     // Reset all mesh counts
     this.factionMeshes.forEach(mesh => mesh.count = 0);
@@ -1041,8 +1128,33 @@ export class CombatantSystem implements GameSystem {
       if (combatant.state === CombatantState.DEAD) return;
       if (combatant.isPlayerProxy) return;
 
+      // Check if player is behind this enemy combatant
+      let isShowingBack = false;
+      if (combatant.faction === Faction.OPFOR) {
+        // Calculate if player is behind enemy
+        const enemyForward = new THREE.Vector3(
+          Math.cos(combatant.visualRotation),
+          0,
+          Math.sin(combatant.visualRotation)
+        );
+        const toPlayer = new THREE.Vector3()
+          .subVectors(this.playerPosition, combatant.position)
+          .normalize();
+
+        // Dot product < 0 means player is behind enemy (more than 90 degrees from forward)
+        const behindDot = enemyForward.dot(toPlayer);
+
+        // Show back texture if:
+        // 1. Player is behind enemy (dot < -0.2 for some tolerance)
+        // 2. Enemy is not actively targeting the player
+        isShowingBack = behindDot < -0.2 &&
+                       (!combatant.target || combatant.target.id !== 'PLAYER');
+      }
+
       let stateKey = 'walking';
-      if (combatant.state === CombatantState.ENGAGING || combatant.state === CombatantState.SUPPRESSING) {
+      if (isShowingBack) {
+        stateKey = 'back';
+      } else if (combatant.state === CombatantState.ENGAGING || combatant.state === CombatantState.SUPPRESSING) {
         stateKey = 'firing';
       } else if (combatant.state === CombatantState.ALERT) {
         stateKey = 'alert';
@@ -1061,46 +1173,76 @@ export class CombatantSystem implements GameSystem {
     this.camera.getWorldDirection(cameraDirection);
     const cameraAngle = Math.atan2(cameraDirection.x, cameraDirection.z);
 
-    // Get camera right vector for determining flip
+    // Calculate camera right and forward vectors
     const cameraRight = new THREE.Vector3();
     cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
+    const cameraForward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
 
     combatantGroups.forEach((combatants, key) => {
       const mesh = this.factionMeshes.get(key);
       if (!mesh) return;
 
       combatants.forEach((combatant, index) => {
-        // Determine if we should flip the sprite based on aim direction
+        // Check if this is a back-facing texture
+        const isBackTexture = key.includes('_back');
+
+        // Get combatant's facing direction (using smoothed visual rotation)
+        const combatantForward = new THREE.Vector3(
+          Math.cos(combatant.visualRotation),
+          0,
+          Math.sin(combatant.visualRotation)
+        );
+
+        // Calculate relative position of combatant to camera
+        const toCombatant = new THREE.Vector3()
+          .subVectors(combatant.position, this.playerPosition)
+          .normalize();
+
+        // Determine which side of the combatant we're viewing
+        const viewAngle = toCombatant.dot(cameraRight);
+
+        let finalRotation: number;
         let scaleX = combatant.scale.x;
 
-        // If combatant has a target, check which side they're aiming
-        if (combatant.target) {
-          const targetPos = combatant.target.id === 'PLAYER'
-            ? this.playerPosition
-            : combatant.target.position;
+        if (isBackTexture) {
+          // Back texture: more camera-facing for clear view, minimal rotation influence
+          // Use 80% camera facing to show the back clearly
+          finalRotation = cameraAngle * 0.8 + combatant.visualRotation * 0.2;
 
-          // Get vector from combatant to target
-          const toTarget = new THREE.Vector3()
-            .subVectors(targetPos, combatant.position)
-            .normalize();
+          // Don't flip back textures - they should always show correctly
+          scaleX = Math.abs(scaleX);
+        } else if (combatant.faction === Faction.OPFOR) {
+          // ENEMIES: Always billboard (face camera) for classic enemy behavior
+          finalRotation = cameraAngle;
+          scaleX = Math.abs(scaleX); // No flipping for enemies
+        } else {
+          // ALLIES (US): Use directional sprites with world-facing rotation
+          // Calculate how much the combatant is facing perpendicular to camera
+          const facingDot = Math.abs(combatantForward.dot(cameraForward));
 
-          // Check if target is to the right or left from camera's perspective
-          const dotProduct = toTarget.dot(cameraRight);
+          // Blend between camera-facing and world-facing based on angle
+          // More world-facing when combatant is perpendicular to camera view
+          const billboardBlend = 0.3 + facingDot * 0.4; // 30-70% billboard facing
 
-          // Flip sprite if aiming to the right (positive dot product)
-          // This makes the gun point in the correct direction
-          scaleX = dotProduct > 0 ? -Math.abs(scaleX) : Math.abs(scaleX);
-        } else if (combatant.state === CombatantState.PATROLLING) {
-          // For patrolling units, flip based on movement direction
-          if (combatant.velocity.length() > 0.1) {
-            const moveDir = combatant.velocity.clone().normalize();
-            const dotProduct = moveDir.dot(cameraRight);
-            scaleX = dotProduct > 0 ? -Math.abs(scaleX) : Math.abs(scaleX);
-          }
+          // Interpolate between camera angle and combatant rotation
+          finalRotation = cameraAngle * billboardBlend + combatant.visualRotation * (1 - billboardBlend);
+
+          // Calculate if we should flip based on viewing angle and facing direction
+          const combatantDotRight = combatantForward.dot(cameraRight);
+
+          // Complex logic for natural-looking sprite flipping:
+          // - If combatant is to our right and facing away from us, don't flip
+          // - If combatant is to our right and facing toward us, flip
+          // - If combatant is to our left and facing away from us, flip
+          // - If combatant is to our left and facing toward us, don't flip
+          const shouldFlip = (viewAngle > 0 && combatantDotRight < 0) ||
+                            (viewAngle < 0 && combatantDotRight > 0);
+
+          scaleX = shouldFlip ? -Math.abs(scaleX) : Math.abs(scaleX);
         }
 
-        // Make billboard face camera
-        matrix.makeRotationY(cameraAngle);
+        // Build transformation matrix
+        matrix.makeRotationY(finalRotation);
         matrix.setPosition(combatant.position);
 
         const scaleMatrix = new THREE.Matrix4().makeScale(
@@ -1437,9 +1579,16 @@ export class CombatantSystem implements GameSystem {
 
   private getTerrainHeight(x: number, z: number): number {
     if (this.chunkManager) {
-      return this.chunkManager.getHeightAt(x, z);
+      const height = this.chunkManager.getHeightAt(x, z);
+      // If chunk isn't loaded, use a reasonable default height
+      // This prevents NPCs from sinking when terrain isn't loaded
+      if (height === 0 && (Math.abs(x) > 50 || Math.abs(z) > 50)) {
+        // Assume flat terrain at y=5 for unloaded chunks
+        return 5;
+      }
+      return height;
     }
-    return 0;
+    return 5; // Default terrain height
   }
 
   // Public API for player interactions

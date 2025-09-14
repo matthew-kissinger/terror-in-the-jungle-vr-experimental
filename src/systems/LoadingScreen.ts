@@ -334,11 +334,8 @@ export class LoadingScreen {
   private setupEventListeners(): void {
     this.playButton.addEventListener('click', () => {
       if (this.onPlayCallback) {
-        this.startGameTransition();
-        // Give transition time to play before starting game
-        setTimeout(() => {
-          if (this.onPlayCallback) this.onPlayCallback();
-        }, 500);
+        // Start game immediately, no transition delay
+        if (this.onPlayCallback) this.onPlayCallback();
       }
     });
 
@@ -433,11 +430,11 @@ export class LoadingScreen {
   }
 
   public hide(): void {
-    // Don't hide immediately - transition handles it
+    // Hide immediately with fade
+    this.container.classList.add('hidden');
     setTimeout(() => {
-      this.container.classList.add('hidden');
       this.isVisible = false;
-    }, 1500);
+    }, 500);
   }
 
   private createSettingsPanel(): HTMLDivElement {
