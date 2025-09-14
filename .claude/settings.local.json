@@ -45,7 +45,8 @@
       "Bash(rm:*)",
       "Bash(findstr:*)",
       "Bash(npx:*)",
-      "WebFetch(domain:mugen87.github.io)"
+      "WebFetch(domain:mugen87.github.io)",
+      "Bash(choco install:*)"
     ],
     "deny": [],
     "ask": []

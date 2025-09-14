@@ -496,18 +496,22 @@ export class PlayerHealthSystem implements GameSystem {
     this.playerState.health = this.playerState.maxHealth;
     this.playerState.isAlive = true;
     this.playerState.isDead = false;
-    this.playerState.invulnerabilityTime = 3.0; // 3 seconds spawn protection
+    this.playerState.invulnerabilityTime = 0; // No spawn protection
 
     // Clear damage indicators
     this.damageIndicators = [];
 
     // Hide death screen
     this.deathScreen.style.display = 'none';
-    this.healthDisplay.classList.add('spawn-protection');
 
-    // Move player to spawn position
-    if (this.playerController && typeof this.playerController.setPosition === 'function') {
-      this.playerController.setPosition(position);
+    // Move player to spawn position and re-enable controls
+    if (this.playerController) {
+      if (typeof this.playerController.setPosition === 'function') {
+        this.playerController.setPosition(position);
+      }
+      if (typeof this.playerController.enableControls === 'function') {
+        this.playerController.enableControls();
+      }
     }
     console.log(`🏥 Player respawned at ${position.x}, ${position.y}, ${position.z}`);
 
@@ -572,6 +576,11 @@ export class PlayerHealthSystem implements GameSystem {
 
     console.log('💀 Player eliminated!');
 
+    // Disable player controls
+    if (this.playerController && typeof this.playerController.disableControls === 'function') {
+      this.playerController.disableControls();
+    }
+
     // Notify ticket system
     if (this.ticketSystem) {
       this.ticketSystem.onCombatantDeath(Faction.US);
@@ -624,6 +633,10 @@ export class PlayerHealthSystem implements GameSystem {
 
   setPlayerController(playerController: any): void {
     this.playerController = playerController;
+  }
+
+  setFirstPersonWeapon(weapon: any): void {
+    this.firstPersonWeapon = weapon;
   }
 
   dispose(): void {

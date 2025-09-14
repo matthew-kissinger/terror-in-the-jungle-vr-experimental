@@ -60,7 +60,7 @@ export class TracerPool {
     if (!tracer) return;
 
     // Update all lines in the group
-    const group = tracer.mesh as THREE.Group;
+    const group = tracer.mesh as unknown as THREE.Group;
     group.children.forEach((child) => {
       if (child instanceof THREE.Line) {
         const positions = (child.geometry as THREE.BufferGeometry).attributes.position as THREE.BufferAttribute;
@@ -90,7 +90,7 @@ export class TracerPool {
         const fadeTime = 50;
         if (timeLeft < fadeTime) {
           const opacity = timeLeft / fadeTime;
-          const group = tracer.mesh as THREE.Group;
+          const group = tracer.mesh as unknown as THREE.Group;
           group.children.forEach((child) => {
             if (child instanceof THREE.Line) {
               (child.material as THREE.LineBasicMaterial).opacity =

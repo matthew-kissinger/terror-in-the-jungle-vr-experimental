@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import './style.css';
 
+// Import loading screen first
+import { LoadingScreen } from './systems/LoadingScreen';
+
 // Import our game systems
 import { AssetLoader } from './systems/AssetLoader';
 // Legacy systems removed: Terrain, BillboardSystem, WorldGenerator
@@ -19,6 +22,7 @@ import { HUDSystem } from './systems/HUDSystem';
 import { TicketSystem } from './systems/TicketSystem';
 import { PlayerHealthSystem } from './systems/PlayerHealthSystem';
 import { MinimapSystem } from './systems/MinimapSystem';
+import { AudioManager } from './systems/AudioManager';
 import { GameSystem } from './types';
 
 class PixelArtSandbox {
@@ -26,7 +30,8 @@ class PixelArtSandbox {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private systems: GameSystem[] = [];
-  
+  private loadingScreen: LoadingScreen;
+
   // Game systems
   private assetLoader!: AssetLoader;
   private chunkManager!: ImprovedChunkManager;
@@ -43,14 +48,19 @@ class PixelArtSandbox {
   private ticketSystem!: TicketSystem;
   private playerHealthSystem!: PlayerHealthSystem;
   private minimapSystem!: MinimapSystem;
+  private audioManager!: AudioManager;
 
   // Game state
   private clock = new THREE.Clock();
   private isInitialized = false;
+  private gameStarted = false;
 
   constructor() {
     console.log('🎮 Initializing Pixel Art Sandbox Engine...');
     console.log('Three.js version:', THREE.REVISION);
+
+    // Create loading screen immediately
+    this.loadingScreen = new LoadingScreen();
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -59,8 +69,8 @@ class PixelArtSandbox {
       0.1,
       1000
     );
-    
-    this.renderer = new THREE.WebGLRenderer({ 
+
+    this.renderer = new THREE.WebGLRenderer({
       antialias: false, // Disabled for pixel-perfect rendering
       powerPreference: 'high-performance'
     });
@@ -68,6 +78,11 @@ class PixelArtSandbox {
     this.setupRenderer();
     this.setupLighting();
     this.setupEventListeners();
+
+    // Setup menu callbacks
+    this.setupMenuCallbacks();
+
+    // Start initialization process
     this.initializeSystems();
   }
 
@@ -78,22 +93,11 @@ class PixelArtSandbox {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    
+
     document.body.appendChild(this.renderer.domElement);
 
-    // Simple crosshair
-    const crosshair = document.createElement('div');
-    crosshair.style.position = 'fixed';
-    crosshair.style.left = '50%';
-    crosshair.style.top = '50%';
-    crosshair.style.transform = 'translate(-50%, -50%)';
-    crosshair.style.width = '4px';
-    crosshair.style.height = '4px';
-    crosshair.style.background = '#ff3333';
-    crosshair.style.borderRadius = '50%';
-    crosshair.style.pointerEvents = 'none';
-    crosshair.style.zIndex = '10';
-    document.body.appendChild(crosshair);
+    // Hide renderer initially
+    this.renderer.domElement.style.display = 'none';
   }
 
   private setupLighting(): void {
@@ -113,7 +117,7 @@ class PixelArtSandbox {
     directionalLight.shadow.camera.right = 100;
     directionalLight.shadow.camera.top = 100;
     directionalLight.shadow.camera.bottom = -100;
-    
+
     this.scene.add(directionalLight);
 
     console.log('✨ Lighting setup complete');
@@ -121,7 +125,7 @@ class PixelArtSandbox {
 
   private setupEventListeners(): void {
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    
+
     // Performance monitoring
     window.addEventListener('keydown', (event) => {
       if (event.key === 'F1') {
@@ -130,19 +134,62 @@ class PixelArtSandbox {
     });
   }
 
+  private setupMenuCallbacks(): void {
+    // Play button starts the game
+    this.loadingScreen.onPlay(() => {
+      this.startGame();
+    });
+
+    // Settings button (placeholder for now)
+    this.loadingScreen.onSettings(() => {
+      console.log('Settings menu not yet implemented');
+      // TODO: Show settings menu
+    });
+
+    // How to play button (placeholder for now)
+    this.loadingScreen.onHowToPlay(() => {
+      console.log('How to play not yet implemented');
+      // TODO: Show how to play screen
+    });
+  }
+
   private async initializeSystems(): Promise<void> {
     try {
       console.log('🔧 Initializing game systems...');
 
+      // Phase 1: Core systems (10%)
+      this.loadingScreen.updateProgress('core', 0);
+
       // Initialize core systems with global billboard system
       this.assetLoader = new AssetLoader();
+
+      this.loadingScreen.updateProgress('core', 0.5);
+
       this.globalBillboardSystem = new GlobalBillboardSystem(this.scene, this.camera, this.assetLoader);
       this.chunkManager = new ImprovedChunkManager(this.scene, this.camera, this.assetLoader, this.globalBillboardSystem);
-      
+
+      this.loadingScreen.updateProgress('core', 1);
+
+      // Phase 2: Load textures (40%)
+      this.loadingScreen.updateProgress('textures', 0);
+
+      await this.assetLoader.init();
+
+      this.loadingScreen.updateProgress('textures', 1);
+
+      // Phase 3: Load audio (20%)
+      this.loadingScreen.updateProgress('audio', 0);
+
+      this.audioManager = new AudioManager(this.scene, this.camera);
+      await this.audioManager.init();
+
+      this.loadingScreen.updateProgress('audio', 1);
+
+      // Phase 4: Initialize world systems (20%)
+      this.loadingScreen.updateProgress('world', 0);
+
       // Keep original systems for fallback compatibility
       this.playerController = new PlayerController(this.camera);
-      // this.enemyAI = new EnemyAI(this.billboardSystem, this.terrain); // Deprecated
-      // this.enemySystem = new EnemySystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.combatantSystem = new CombatantSystem(this.scene, this.camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
       this.skybox = new Skybox(this.scene);
       this.waterSystem = new WaterSystem(this.scene, this.assetLoader);
@@ -152,7 +199,7 @@ class PixelArtSandbox {
       this.ticketSystem = new TicketSystem();
       this.playerHealthSystem = new PlayerHealthSystem();
       this.minimapSystem = new MinimapSystem(this.camera);
-      
+
       // Connect systems with chunk manager
       this.playerController.setChunkManager(this.chunkManager);
       this.combatantSystem.setChunkManager(this.chunkManager);
@@ -170,15 +217,20 @@ class PixelArtSandbox {
       this.playerHealthSystem.setZoneManager(this.zoneManager);
       this.playerHealthSystem.setTicketSystem(this.ticketSystem);
       this.playerHealthSystem.setPlayerController(this.playerController); // Connect player controller for respawning
+      this.playerHealthSystem.setFirstPersonWeapon(this.firstPersonWeapon); // Connect weapon for disabling on death
       this.minimapSystem.setZoneManager(this.zoneManager);
       this.minimapSystem.setCombatantSystem(this.combatantSystem);
       this.zoneManager.setCombatantSystem(this.combatantSystem);
       this.zoneManager.setCamera(this.camera);
-      this.zoneManager.setChunkManager(this.chunkManager);
+
+      // Connect audio manager
+      this.firstPersonWeapon.setAudioManager(this.audioManager);
+      this.combatantSystem.setAudioManager(this.audioManager);
 
       // Add systems to update list - NEW ORDER WITH GLOBAL BILLBOARD SYSTEM
       this.systems = [
         this.assetLoader,
+        this.audioManager,
         this.globalBillboardSystem,
         this.chunkManager,
         this.waterSystem,
@@ -193,10 +245,17 @@ class PixelArtSandbox {
         this.skybox
       ];
 
+      this.loadingScreen.updateProgress('world', 0.5);
+
       // Initialize all systems
       for (const system of this.systems) {
         await system.init();
       }
+
+      this.loadingScreen.updateProgress('world', 1);
+
+      // Phase 5: Final setup (10%)
+      this.loadingScreen.updateProgress('entities', 0);
 
       console.log('🎯 Systems initialized, loading assets...');
       await this.loadGameAssets();
@@ -211,9 +270,13 @@ class PixelArtSandbox {
       // Chunks generate dynamically via ImprovedChunkManager
       console.log('🌍 World system ready for dynamic chunk loading...');
 
+      this.loadingScreen.updateProgress('entities', 1);
+
       this.isInitialized = true;
       console.log('🚀 Pixel Art Sandbox ready!');
-      this.showWelcomeMessage();
+
+      // Show main menu instead of starting immediately
+      this.loadingScreen.showMainMenu();
 
     } catch (error) {
       console.error('❌ Failed to initialize sandbox:', error);
@@ -229,7 +292,47 @@ class PixelArtSandbox {
     console.log('📦 Asset check complete');
   }
 
-  // Legacy buildWorld removed; generation handled by chunk manager and billboard system
+  private startGame(): void {
+    if (!this.isInitialized || this.gameStarted) return;
+
+    console.log('🎮 Starting game...');
+
+    // Hide loading screen with fade effect
+    this.loadingScreen.hide();
+
+    // Show renderer
+    this.renderer.domElement.style.display = 'block';
+
+    // Delay combat start to give player time to orient
+    setTimeout(() => {
+      // Start ambient audio after a brief pause
+      if (this.audioManager) {
+        this.audioManager.startAmbient();
+      }
+
+      // Enable AI combat after player has control
+      if (this.combatantSystem && typeof this.combatantSystem.enableCombat === 'function') {
+        this.combatantSystem.enableCombat();
+      }
+    }, 1500); // 1.5 second delay before ambient audio and combat
+
+    // Show crosshair
+    const crosshair = document.createElement('div');
+    crosshair.style.position = 'fixed';
+    crosshair.style.left = '50%';
+    crosshair.style.top = '50%';
+    crosshair.style.transform = 'translate(-50%, -50%)';
+    crosshair.style.width = '4px';
+    crosshair.style.height = '4px';
+    crosshair.style.background = '#ff3333';
+    crosshair.style.borderRadius = '50%';
+    crosshair.style.pointerEvents = 'none';
+    crosshair.style.zIndex = '10';
+    document.body.appendChild(crosshair);
+
+    this.gameStarted = true;
+    this.showWelcomeMessage();
+  }
 
   private onWindowResize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -238,6 +341,8 @@ class PixelArtSandbox {
   }
 
   private togglePerformanceStats(): void {
+    if (!this.gameStarted) return;
+
     const debugInfo = this.globalBillboardSystem.getDebugInfo();
     console.log('📊 Performance Stats:');
     console.log(`FPS: ${Math.round(1 / this.clock.getDelta())}`);
@@ -246,7 +351,7 @@ class PixelArtSandbox {
     console.log(`Grass instances: ${debugInfo.grassUsed}/${this.globalBillboardSystem.getInstanceCount('grass')}`);
     console.log(`Tree instances: ${debugInfo.treeUsed}/${this.globalBillboardSystem.getInstanceCount('tree')}`);
     const stats = this.combatantSystem.getCombatStats();
-    console.log(`Combatants - US: ${stats.us}, OPFOR: ${stats.opfor}`);  
+    console.log(`Combatants - US: ${stats.us}, OPFOR: ${stats.opfor}`);
     console.log(`Chunks loaded: ${this.chunkManager.getLoadedChunkCount()}, Queue: ${this.chunkManager.getQueueSize()}, Loading: ${this.chunkManager.getLoadingCount()}`);
     console.log(`Chunks tracked: ${debugInfo.chunksTracked}`);
   }
@@ -254,33 +359,24 @@ class PixelArtSandbox {
   private showWelcomeMessage(): void {
     const debugInfo = this.globalBillboardSystem.getDebugInfo();
     console.log(`
-🎮 PIXEL ART SANDBOX ENGINE READY!
+🎮 TERROR IN THE JUNGLE - GAME STARTED!
 
 🌍 World Features:
 - ${debugInfo.grassUsed} grass instances allocated
 - ${debugInfo.treeUsed} tree instances allocated
 - ${this.chunkManager ? this.chunkManager.getLoadedChunkCount() : 0} chunks loaded
 - ${this.combatantSystem ? `US: ${this.combatantSystem.getCombatStats().us}, OPFOR: ${this.combatantSystem.getCombatStats().opfor}` : '0'} combatants in battle
-- Global billboard system with centralized camera tracking
-- Dynamic chunk loading system
-- Equirectangular skybox
 
 🎯 Controls:
 - WASD: Move around
 - Shift: Run
 - Mouse: Look around (click to enable)
+- Left Click: Fire
+- Right Click: Aim Down Sights
 - F1: Performance stats
 - Escape: Release mouse lock
 
-🔧 Developer Features:
-- Auto-asset discovery from /assets/
-- Pixel-perfect rendering
-- Global billboard system (100K+ instances)
-- Dynamic chunk loading/unloading
-- Centralized camera tracking
-- Modular architecture
-
-Drop new PNG files in public/assets/ and they'll be auto-discovered!
+Have fun!
     `);
   }
 
@@ -291,7 +387,7 @@ Drop new PNG files in public/assets/ and they'll be auto-discovered!
   private animate(): void {
     requestAnimationFrame(this.animate.bind(this));
 
-    if (!this.isInitialized) return;
+    if (!this.isInitialized || !this.gameStarted) return;
 
     const deltaTime = this.clock.getDelta();
 
@@ -305,7 +401,7 @@ Drop new PNG files in public/assets/ and they'll be auto-discovered!
 
     // Render the main scene
     this.renderer.render(this.scene, this.camera);
-    
+
     // Render weapon overlay on top
     if (this.firstPersonWeapon) {
       this.firstPersonWeapon.renderWeapon(this.renderer);
@@ -313,6 +409,9 @@ Drop new PNG files in public/assets/ and they'll be auto-discovered!
   }
 
   public dispose(): void {
+    // Clean up loading screen
+    this.loadingScreen.dispose();
+
     // Clean up all systems
     for (const system of this.systems) {
       system.dispose();
@@ -321,7 +420,7 @@ Drop new PNG files in public/assets/ and they'll be auto-discovered!
     // Clean up Three.js resources
     this.renderer.dispose();
     document.body.removeChild(this.renderer.domElement);
-    
+
     console.log('🧹 Sandbox disposed');
   }
 }

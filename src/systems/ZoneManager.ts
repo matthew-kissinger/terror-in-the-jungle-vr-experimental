@@ -168,7 +168,8 @@ export class ZoneManager implements GameSystem {
       captureProgress: config.owner ? 100 : 0,
       captureSpeed: this.CAPTURE_SPEED,
       isHomeBase: config.isHomeBase,
-      ticketBleedRate: config.ticketBleedRate
+      ticketBleedRate: config.ticketBleedRate,
+      currentFlagHeight: 0
     };
 
     // Create visual representation

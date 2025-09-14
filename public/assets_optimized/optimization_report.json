@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "name": "forestfloor.png",
+      "original": 145157,
+      "optimized": 145157,
+      "reduction": 0.0
+    },
+    {
+      "name": "skybox.png",
+      "original": 13408490,
+      "optimized": 16755437,
+      "reduction": -24.96140132110327
+    },
+    {
+      "name": "tree.png",
+      "original": 9249,
+      "optimized": 5677,
+      "reduction": 38.62039139366418
+    }
+  ],
+  "total_original": 55885022,
+  "total_optimized": 16906271
+}

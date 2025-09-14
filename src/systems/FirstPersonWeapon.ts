@@ -9,6 +9,7 @@ import { GunplayCore, WeaponSpec } from './GunplayCore';
 import { CombatantSystem } from './CombatantSystem';
 import { AssetLoader } from './AssetLoader';
 import { PlayerController } from './PlayerController';
+import { AudioManager } from './AudioManager';
 
 export class FirstPersonWeapon implements GameSystem {
   private scene: THREE.Scene;
@@ -63,6 +64,7 @@ export class FirstPersonWeapon implements GameSystem {
   // private enemySystem?: EnemySystem;
   private combatantSystem?: CombatantSystem;
   private hudSystem?: any; // HUD system for hit markers
+  private audioManager?: AudioManager;
   
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -107,8 +109,10 @@ export class FirstPersonWeapon implements GameSystem {
     console.log('✅ First Person Weapon initialized (programmatic rifle)');
   }
 
+  private isEnabled = true; // For death system
+
   update(deltaTime: number): void {
-    if (!this.weaponRig) return;
+    if (!this.weaponRig || !this.isEnabled) return;
     
     // Update idle animation
     this.idleTime += deltaTime;
@@ -304,8 +308,13 @@ export class FirstPersonWeapon implements GameSystem {
   }
   
   private tryFire(): void {
-    if (!this.combatantSystem || !this.gunCore.canFire()) return;
+    if (!this.combatantSystem || !this.gunCore.canFire() || !this.isEnabled) return;
     this.gunCore.registerShot();
+
+    // Play player gunshot sound
+    if (this.audioManager) {
+      this.audioManager.playPlayerGunshot();
+    }
 
     // Spread and recoil
     const spread = this.gunCore.getSpreadDeg();
@@ -365,5 +374,27 @@ export class FirstPersonWeapon implements GameSystem {
 
   setHUDSystem(hudSystem: any): void {
     this.hudSystem = hudSystem;
+  }
+
+  setAudioManager(audioManager: AudioManager): void {
+    this.audioManager = audioManager;
+  }
+
+  // Disable weapon (for death)
+  disable(): void {
+    this.isEnabled = false;
+    this.isADS = false;
+    this.adsProgress = 0;
+    if (this.weaponRig) {
+      this.weaponRig.visible = false;
+    }
+  }
+
+  // Enable weapon (for respawn)
+  enable(): void {
+    this.isEnabled = true;
+    if (this.weaponRig) {
+      this.weaponRig.visible = true;
+    }
   }
 }

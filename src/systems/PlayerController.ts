@@ -10,6 +10,7 @@ export class PlayerController implements GameSystem {
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
   private isPointerLocked = false;
+  private isControlsEnabled = true; // For death system
 
   // Camera settings
   private pitch = 0;
@@ -20,7 +21,7 @@ export class PlayerController implements GameSystem {
     this.camera = camera;
     
     this.playerState = {
-      position: new THREE.Vector3(0, 5, 10), // BACK TO ORIGINAL POSITION
+      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location
       velocity: new THREE.Vector3(0, 0, 0),
       speed: 10,
       runSpeed: 20,
@@ -41,6 +42,7 @@ export class PlayerController implements GameSystem {
   }
 
   update(deltaTime: number): void {
+    if (!this.isControlsEnabled) return; // Skip updates when dead
     this.updateMovement(deltaTime);
     this.updateCamera();
     
@@ -77,19 +79,20 @@ export class PlayerController implements GameSystem {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    if (!this.isControlsEnabled) return; // Ignore input when dead
     this.keys.add(event.code.toLowerCase());
-    
+
     // Handle special keys
     if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
       this.playerState.isRunning = true;
     }
-    
+
     if (event.code === 'Space' && this.playerState.isGrounded && !this.playerState.isJumping) {
       this.playerState.velocity.y = this.playerState.jumpForce;
       this.playerState.isJumping = true;
       this.playerState.isGrounded = false;
     }
-    
+
     if (event.code === 'Escape') {
       document.exitPointerLock();
     }
@@ -242,6 +245,19 @@ export class PlayerController implements GameSystem {
     this.playerState.velocity.set(0, 0, 0);
     this.playerState.isGrounded = false;
     console.log(`Player teleported to ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+  }
+
+  // Disable controls (for death)
+  disableControls(): void {
+    this.isControlsEnabled = false;
+    this.keys.clear();
+    this.playerState.velocity.set(0, 0, 0);
+    this.playerState.isRunning = false;
+  }
+
+  // Enable controls (for respawn)
+  enableControls(): void {
+    this.isControlsEnabled = true;
   }
 
   private showControls(): void {

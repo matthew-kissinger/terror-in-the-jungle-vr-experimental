@@ -10,6 +10,7 @@ import { ImpactEffectsPool } from './ImpactEffectsPool';
 import { TicketSystem } from './TicketSystem';
 import { PlayerHealthSystem } from './PlayerHealthSystem';
 import { ZoneManager } from './ZoneManager';
+import { AudioManager } from './AudioManager';
 
 // Faction enum
 export enum Faction {
@@ -112,6 +113,7 @@ export class CombatantSystem implements GameSystem {
   private ticketSystem?: TicketSystem;
   private playerHealthSystem?: PlayerHealthSystem;
   private zoneManager?: ZoneManager;
+  private audioManager?: AudioManager;
 
   // Effects pools
   private tracerPool: TracerPool;
@@ -152,6 +154,7 @@ export class CombatantSystem implements GameSystem {
 
   // Player targeting proxy (for AI to use enemy-sized hitboxes)
   private playerProxyId: string = 'player_proxy';
+  private combatEnabled = false; // Start with combat disabled
 
   constructor(
     scene: THREE.Scene,
@@ -240,48 +243,34 @@ export class CombatantSystem implements GameSystem {
     // Get initial player position for relative spawning
     this.camera.getWorldPosition(this.playerPosition);
 
-    // Spawn US forces near player (allies)
+    // Spawn US forces spread around US base (z = -50)
+    // First squad: left flank
     this.spawnSquad(Faction.US, new THREE.Vector3(
-      this.playerPosition.x + 15,
+      -25,
       0,
-      this.playerPosition.z + 10
+      -35
     ), 5);
+    // Second squad: right flank
     this.spawnSquad(Faction.US, new THREE.Vector3(
-      this.playerPosition.x - 20,
+      20,
       0,
-      this.playerPosition.z + 5
+      -40
     ), 4);
 
-    // Spawn OPFOR forces near their base/controlled zones when available
-    let opforCenters: THREE.Vector3[] = [];
-    if (this.zoneManager) {
-      const opforZones = this.zoneManager.getZonesByOwner(Faction.OPFOR);
-      const base = opforZones.find(z => z.id === 'opfor_base');
-      if (base) opforCenters.push(base.position.clone());
-      opforZones.filter(z => !z.isHomeBase).forEach(z => opforCenters.push(z.position.clone()));
-    }
-
-    if (opforCenters.length === 0) {
-      // Fallback: far from player
-      const angles = [0, Math.PI * 0.6, Math.PI * 1.2, Math.PI * 1.6];
-      angles.forEach((angle, i) => {
-        const distance = 90 + Math.random() * 40;
-        const x = this.playerPosition.x + Math.cos(angle) * distance;
-        const z = this.playerPosition.z + Math.sin(angle) * distance;
-        this.spawnSquad(Faction.OPFOR, new THREE.Vector3(x, 0, z), 4 + (i === 0 ? 1 : 0));
-      });
-    } else {
-      opforCenters.forEach((center, idx) => {
-        const squads = idx === 0 ? 3 : 1;
-        for (let i = 0; i < squads; i++) {
-          const angle = Math.random() * Math.PI * 2;
-          const radius = 20 + Math.random() * 30;
-          const x = center.x + Math.cos(angle) * radius;
-          const z = center.z + Math.sin(angle) * radius;
-          this.spawnSquad(Faction.OPFOR, new THREE.Vector3(x, 0, z), 4);
-        }
-      });
-    }
+    // Spawn OPFOR forces spread around their base (z = 150)
+    // Create defensive positions around OPFOR base
+    // First squad: left side
+    this.spawnSquad(Faction.OPFOR, new THREE.Vector3(
+      -30,
+      0,
+      130
+    ), 5);
+    // Second squad: right side
+    this.spawnSquad(Faction.OPFOR, new THREE.Vector3(
+      25,
+      0,
+      135
+    ), 5);
 
     console.log(`🎖️ Initial forces deployed: ${this.combatants.size} combatants`);
   }
@@ -296,12 +285,24 @@ export class CombatantSystem implements GameSystem {
     };
 
     for (let i = 0; i < size; i++) {
-      // Formation spread
-      const offset = new THREE.Vector3(
-        (Math.random() - 0.5) * 8,
-        0,
-        (Math.random() - 0.5) * 8
-      );
+      // Better formation spread - wedge or line formation
+      let offset: THREE.Vector3;
+      if (i === 0) {
+        // Leader at front/center
+        offset = new THREE.Vector3(0, 0, 0);
+      } else {
+        // Followers in formation behind/beside leader
+        const row = Math.floor((i - 1) / 3); // 3 per row
+        const col = (i - 1) % 3 - 1; // -1, 0, 1
+        offset = new THREE.Vector3(
+          col * 4, // 4 meters apart horizontally
+          0,
+          -row * 4 // 4 meters behind each row
+        );
+        // Add small random variation to avoid perfect grid
+        offset.x += (Math.random() - 0.5) * 1.5;
+        offset.z += (Math.random() - 0.5) * 1.5;
+      }
       const position = centerPos.clone().add(offset);
       position.y = this.getTerrainHeight(position.x, position.z) + 3;
 
@@ -437,6 +438,13 @@ export class CombatantSystem implements GameSystem {
   update(deltaTime: number): void {
     // Update player position
     this.camera.getWorldPosition(this.playerPosition);
+
+    // Don't process AI if combat not yet enabled
+    if (!this.combatEnabled) {
+      // Still update visuals but no AI behavior
+      this.updateCombatantBillboards();
+      return;
+    }
 
     // Ensure player proxy exists and tracks player position
     this.ensurePlayerProxy();
@@ -744,6 +752,11 @@ export class CombatantSystem implements GameSystem {
       muzzlePos.add(shotRay.direction.clone().multiplyScalar(2));
       this.muzzleFlashPool.spawn(muzzlePos, shotRay.direction, 1.2); // Increased size
 
+      // Play positional gunshot sound
+      if (this.audioManager) {
+        this.audioManager.playGunshotAt(combatant.position);
+      }
+
       // Spawn impact if hit
       if (hit) {
         this.impactEffectsPool.spawn(hit.point, shotRay.direction.clone().negate());
@@ -799,6 +812,11 @@ export class CombatantSystem implements GameSystem {
       const muzzleFlashPos = muzzlePos.clone();
       muzzleFlashPos.add(shotRay.direction.clone().multiplyScalar(2));
       this.muzzleFlashPool.spawn(muzzleFlashPos, shotRay.direction, 1.2);
+
+      // Play positional gunshot sound for suppressive fire
+      if (this.audioManager) {
+        this.audioManager.playGunshotAt(combatant.position);
+      }
 
       // Random impact effects for suppression (area denial)
       if (Math.random() < 0.3) {
@@ -1311,6 +1329,12 @@ export class CombatantSystem implements GameSystem {
       target.state = CombatantState.DEAD;
       console.log(`💀 ${target.faction} soldier eliminated${attacker ? ` by ${attacker.faction}` : ''}`);
 
+      // Play death sound at combatant position
+      if (this.audioManager) {
+        const isAlly = target.faction === Faction.US;
+        this.audioManager.playDeathSound(target.position, isAlly);
+      }
+
       // Notify ticket system of casualty
       if (this.ticketSystem) {
         this.ticketSystem.onCombatantDeath(target.faction);
@@ -1536,6 +1560,16 @@ export class CombatantSystem implements GameSystem {
 
   setHUDSystem(hudSystem: any): void {
     (this as any).hudSystem = hudSystem;
+  }
+
+  setAudioManager(audioManager: AudioManager): void {
+    this.audioManager = audioManager;
+  }
+
+  // Enable combat (called after game start delay)
+  enableCombat(): void {
+    this.combatEnabled = true;
+    console.log('⚔️ Combat AI activated');
   }
 
   dispose(): void {
