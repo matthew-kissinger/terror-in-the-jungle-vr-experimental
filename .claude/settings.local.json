@@ -47,7 +47,8 @@
       "Bash(npx:*)",
       "WebFetch(domain:mugen87.github.io)",
       "Bash(choco install:*)",
-      "Bash(del C:UsersMattmXpix3dsrcsystemsHelicopterIntro.ts)"
+      "Bash(del C:UsersMattmXpix3dsrcsystemsHelicopterIntro.ts)",
+      "Bash(Where-Object { -not $_SIsContainer })"
     ],
     "deny": [],
     "ask": []

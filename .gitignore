@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backup and temporary files
+*.backup
+*.old
+*.tmp
+assets_backup_*/
+assets_archive/
+assets_optimized/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
