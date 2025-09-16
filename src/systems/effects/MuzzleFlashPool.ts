@@ -92,8 +92,8 @@ export class MuzzleFlashPool {
     const sprite = new THREE.Sprite(spriteMaterial);
     sprite.scale.set(0.5, 0.5, 1);
 
-    // Dynamic light for environmental lighting
-    const light = new THREE.PointLight(0xffaa33, 3, 8);
+    // Dynamic light for environmental lighting - enhanced for night visibility
+    const light = new THREE.PointLight(0xffaa33, 8, 25); // Increased intensity and range for night
     light.decay = 2;
 
     return {

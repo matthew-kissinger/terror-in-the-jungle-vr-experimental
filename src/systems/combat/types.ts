@@ -69,6 +69,7 @@ export interface Combatant {
   updatePriority: number;
   lodLevel: 'high' | 'medium' | 'low' | 'culled';
   isPlayerProxy?: boolean;
+  isObjectiveFocused?: boolean;
 }
 
 export interface Squad {

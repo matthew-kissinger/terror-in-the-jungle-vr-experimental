@@ -81,15 +81,27 @@ export class CombatantCombat {
     // Calculate accuracy multiplier
     let accuracyMultiplier = 1.0;
     if (combatant.currentBurst === 1) {
-      accuracyMultiplier = combatant.skillProfile.firstShotAccuracy || 0.2;
+      accuracyMultiplier = combatant.skillProfile.firstShotAccuracy || 0.4; // Reduced first shot bonus
     } else {
-      const degradation = combatant.skillProfile.burstDegradation || 2.0;
-      accuracyMultiplier = 1.0 + (combatant.currentBurst - 1) * (degradation - 1) / 2;
-      accuracyMultiplier = Math.min(accuracyMultiplier, 4.0);
+      const degradation = combatant.skillProfile.burstDegradation || 3.5; // Increased burst degradation
+      accuracyMultiplier = 1.0 + (combatant.currentBurst - 1) * degradation / 2;
+      accuracyMultiplier = Math.min(accuracyMultiplier, 8.0); // Increased max inaccuracy
     }
 
     if (combatant.isFullAuto) {
-      accuracyMultiplier *= 1.5;
+      accuracyMultiplier *= 2.0; // Increased full auto penalty
+    }
+
+    // Add distance-based accuracy degradation
+    const targetPos = combatant.target?.id === 'PLAYER' ? playerPosition : combatant.target?.position;
+    if (targetPos) {
+      const distance = combatant.position.distanceTo(targetPos);
+
+      // Exponential accuracy falloff over distance
+      if (distance > 30) {
+        const distancePenalty = Math.pow(1.5, (distance - 30) / 20); // Exponential growth
+        accuracyMultiplier *= Math.min(distancePenalty, 8.0); // Cap at 8x inaccuracy
+      }
     }
 
     const shotRay = this.calculateAIShot(combatant, playerPosition, accuracyMultiplier);

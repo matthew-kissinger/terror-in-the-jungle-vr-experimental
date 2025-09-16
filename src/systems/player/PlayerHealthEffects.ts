@@ -11,6 +11,7 @@ export class PlayerHealthEffects {
   private damageIndicators: DamageIndicator[] = [];
   private damageOverlay: HTMLCanvasElement;
   private damageContext: CanvasRenderingContext2D;
+  private cameraDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1);
 
   // Audio for heartbeat effect
   private audioContext?: AudioContext;
@@ -70,18 +71,33 @@ export class PlayerHealthEffects {
   addDamageIndicator(
     amount: number,
     sourcePosition?: THREE.Vector3,
-    playerPosition?: THREE.Vector3
+    playerPosition?: THREE.Vector3,
+    cameraDirection?: THREE.Vector3
   ): void {
-    if (sourcePosition && playerPosition) {
-      const direction = new THREE.Vector3()
-        .subVectors(sourcePosition, playerPosition)
-        .normalize();
+    if (sourcePosition && playerPosition && cameraDirection) {
+      // Update camera direction
+      this.cameraDirection.copy(cameraDirection);
 
-      // Convert to screen angle
-      const screenAngle = Math.atan2(direction.z, direction.x);
+      // Calculate direction from player to damage source
+      const toSource = new THREE.Vector3()
+        .subVectors(sourcePosition, playerPosition);
+      toSource.y = 0; // Ignore vertical component
+      toSource.normalize();
+
+      // Get camera forward direction (ignore vertical)
+      const cameraForward = cameraDirection.clone();
+      cameraForward.y = 0;
+      cameraForward.normalize();
+
+      // Calculate angle relative to camera forward
+      // Use atan2 to get the angle in the correct quadrant
+      const angle = Math.atan2(
+        toSource.x * cameraForward.z - toSource.z * cameraForward.x,
+        toSource.x * cameraForward.x + toSource.z * cameraForward.z
+      );
 
       this.damageIndicators.push({
-        direction: screenAngle,
+        direction: angle,
         intensity: Math.min(1.0, amount / 50),
         timestamp: Date.now(),
         fadeTime: 2.0
@@ -113,34 +129,65 @@ export class PlayerHealthEffects {
   renderDamageOverlay(health: number, maxHealth: number): void {
     this.damageContext.clearRect(0, 0, this.damageOverlay.width, this.damageOverlay.height);
 
-    // Render damage indicators
+    // Render damage indicators as partial circle arcs
     this.damageIndicators.forEach(indicator => {
       const age = (Date.now() - indicator.timestamp) / 1000;
       const alpha = Math.max(0, (indicator.fadeTime - age) / indicator.fadeTime);
 
       this.damageContext.save();
-      this.damageContext.globalAlpha = alpha * indicator.intensity;
 
-      // Draw directional damage indicator
+      // Calculate opacity based on age and intensity
+      const opacity = alpha * indicator.intensity * 0.8;
+      this.damageContext.globalAlpha = opacity;
+
+      // Setup indicator position and size
       const centerX = this.damageOverlay.width / 2;
       const centerY = this.damageOverlay.height / 2;
-      const distance = Math.min(centerX, centerY) * 0.8;
+      const radius = Math.min(centerX, centerY) * 0.4; // Distance from center
+      const arcWidth = 30; // Width of the arc indicator
+      const arcSpread = Math.PI / 6; // 30 degrees spread (1/6 of a circle)
 
-      const x = centerX + Math.cos(indicator.direction) * distance;
-      const y = centerY + Math.sin(indicator.direction) * distance;
+      // Calculate the angle for the indicator
+      // Rotate by -90 degrees (PI/2) so 0 is up
+      const angle = indicator.direction - Math.PI / 2;
 
-      // Draw arrow pointing to damage source
-      this.damageContext.fillStyle = '#ff4444';
+      // Draw the partial circle arc
+      const gradient = this.damageContext.createRadialGradient(
+        centerX, centerY, radius - arcWidth,
+        centerX, centerY, radius + arcWidth
+      );
+      gradient.addColorStop(0, 'rgba(255, 0, 0, 0)');
+      gradient.addColorStop(0.5, 'rgba(255, 50, 50, 1)');
+      gradient.addColorStop(1, 'rgba(200, 0, 0, 0.5)');
+
+      this.damageContext.strokeStyle = gradient;
+      this.damageContext.lineWidth = arcWidth;
+      this.damageContext.lineCap = 'round';
+
+      // Draw the arc
       this.damageContext.beginPath();
-      this.damageContext.arc(x, y, 10 * indicator.intensity, 0, Math.PI * 2);
-      this.damageContext.fill();
+      this.damageContext.arc(
+        centerX,
+        centerY,
+        radius,
+        angle - arcSpread / 2,
+        angle + arcSpread / 2,
+        false
+      );
+      this.damageContext.stroke();
 
-      // Draw line to edge
-      this.damageContext.strokeStyle = '#ff4444';
-      this.damageContext.lineWidth = 3 * indicator.intensity;
+      // Add an inner glow for visibility
+      this.damageContext.strokeStyle = `rgba(255, 100, 100, ${opacity * 0.5})`;
+      this.damageContext.lineWidth = arcWidth * 0.6;
       this.damageContext.beginPath();
-      this.damageContext.moveTo(centerX, centerY);
-      this.damageContext.lineTo(x, y);
+      this.damageContext.arc(
+        centerX,
+        centerY,
+        radius,
+        angle - arcSpread / 2,
+        angle + arcSpread / 2,
+        false
+      );
       this.damageContext.stroke();
 
       this.damageContext.restore();

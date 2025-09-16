@@ -37,6 +37,9 @@ export class PlayerHealthSystem implements GameSystem {
   private effects: PlayerHealthEffects;
   private respawnManager: PlayerRespawnManager;
 
+  // Camera reference for damage indicators
+  private camera?: THREE.Camera;
+
   constructor() {
     this.ui = new PlayerHealthUI();
     this.effects = new PlayerHealthEffects();
@@ -152,8 +155,13 @@ export class PlayerHealthSystem implements GameSystem {
 
     console.log(`💥 Player took ${amount} damage, health: ${Math.round(this.playerState.health)}`);
 
-    // Add damage effects
-    this.effects.addDamageIndicator(amount, sourcePosition, playerPosition);
+    // Add damage effects with camera direction
+    let cameraDirection: THREE.Vector3 | undefined;
+    if (this.camera) {
+      cameraDirection = new THREE.Vector3();
+      this.camera.getWorldDirection(cameraDirection);
+    }
+    this.effects.addDamageIndicator(amount, sourcePosition, playerPosition, cameraDirection);
 
     // Check for death
     if (this.playerState.health <= 0) {
@@ -214,6 +222,10 @@ export class PlayerHealthSystem implements GameSystem {
 
   setFirstPersonWeapon(weapon: any): void {
     this.respawnManager.setFirstPersonWeapon(weapon);
+  }
+
+  setCamera(camera: THREE.Camera): void {
+    this.camera = camera;
   }
 
   dispose(): void {

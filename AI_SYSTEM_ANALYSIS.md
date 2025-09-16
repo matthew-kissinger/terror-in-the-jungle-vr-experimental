@@ -87,7 +87,16 @@ The game features a sophisticated AI combat system with two factions: **US Force
 - Removed from active combat
 - Affects ticket system
 
-## Combat Behavior
+## Combat Behavior (UPDATED)
+
+### Distance-Based Accuracy System
+- **Base Accuracy**: Significantly reduced for survivability
+- **Distance Degradation**: Exponential falloff beyond 30 units
+  - 0-30 units: Base accuracy
+  - 30-50 units: ~1.5-2x inaccuracy
+  - 50-70 units: ~3-4x inaccuracy
+  - 70-90 units: ~5-6x inaccuracy
+  - 90+ units: Up to 8x inaccuracy cap
 
 ### Shooting Mechanics
 
@@ -103,35 +112,57 @@ The game features a sophisticated AI combat system with two factions: **US Force
 3. **Outnumbered** (> 2 enemies within 20 units): 6-round bursts
 4. **Suppressing Fire**: 12-round bursts, 100ms pause
 
-### Accuracy System
+### Accuracy System (UPDATED)
 
 #### Base Accuracy (Aim Jitter in degrees)
-- **OPFOR Leaders**: 0.3° jitter
-- **OPFOR Followers**: 0.5° jitter
-- **US Leaders**: 0.4° jitter
-- **US Followers**: 0.6° jitter
+- **OPFOR Leaders**: 1.2° jitter (was 0.3°)
+- **OPFOR Followers**: 1.8° jitter (was 0.5°)
+- **US Leaders**: 1.5° jitter (was 0.4°)
+- **US Followers**: 2.0° jitter (was 0.6°)
 
 #### Accuracy Modifiers
 - **First Shot Accuracy**:
-  - OPFOR: 0.15x multiplier (more accurate)
-  - US: 0.2x multiplier
+  - OPFOR: 0.4x multiplier (was 0.15x, now less accurate)
+  - US: 0.5x multiplier (was 0.2x, now less accurate)
 - **Burst Degradation**:
-  - OPFOR: 2.0x degradation per shot
-  - US: 2.5x degradation per shot
-- **Full Auto Penalty**: Additional 1.5x accuracy reduction
-- **Maximum Degradation**: Capped at 4.0x
+  - OPFOR: 3.5x degradation per shot (was 2.0x)
+  - US: 4.0x degradation per shot (was 2.5x)
+- **Full Auto Penalty**: Additional 2.0x accuracy reduction (was 1.5x)
+- **Maximum Degradation**: Capped at 8.0x (was 4.0x)
+- **Distance Penalty**: Exponential growth beyond 30 units
 
-#### Target Leading
-- **OPFOR Leaders**: 90% leading accuracy
-- **OPFOR Followers**: 80% leading accuracy
-- **US Leaders**: 85% leading accuracy
-- **US Followers**: 75% leading accuracy
+#### Target Leading (UPDATED)
+- **OPFOR Leaders**: 70% leading accuracy (was 90%)
+- **OPFOR Followers**: 50% leading accuracy (was 80%)
+- **US Leaders**: 60% leading accuracy (was 85%)
+- **US Followers**: 40% leading accuracy (was 75%)
 
-### Engagement Range
+### Engagement Range & Behavior (UPDATED)
+
+#### Engagement Probability by Distance
+- **< 30 units**: 100% engagement chance
+- **30-60 units**: 80% engagement chance
+- **60-90 units**: 50% engagement chance
+- **> 90 units**: 20% engagement chance (suppressing fire only)
+
+#### Objective-Focused NPCs (NEW)
+- **40% of OPFOR** are objective-focused
+- Will only engage enemies if:
+  - Within 30 units (close range)
+  - Recently shot (within 3 seconds)
+  - Defending captured zone
+- Otherwise prioritize zone capture/movement
+
+#### Movement Behavior
 - **Maximum Engagement**: 150 units
 - **Ideal Combat Distance**: 30 units
 - **Advance Threshold**: > 40 units (moves closer)
 - **Retreat Threshold**: < 20 units (backs away)
+
+#### Reaction Time Scaling (NEW)
+- Base reaction time PLUS:
+- **+250ms per 30 units of distance**
+- Example: Enemy at 90 units = base + 750ms delay
 
 ## Weapon Systems
 

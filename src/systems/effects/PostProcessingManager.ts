@@ -1,0 +1,85 @@
+import * as THREE from 'three';
+import {
+  EffectComposer,
+  RenderPass,
+  EffectPass,
+  SMAAEffect,
+  SMAAPreset
+} from 'postprocessing';
+import { PixelationPass } from './PixelationPass';
+
+export class PostProcessingManager {
+  private composer: EffectComposer;
+  private renderPass: RenderPass;
+  private pixelationPass: PixelationPass;
+  private enabled: boolean = true;
+
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera
+  ) {
+    // Initialize composer
+    this.composer = new EffectComposer(renderer, {
+      frameBufferType: THREE.HalfFloatType
+    });
+
+    // Add render pass
+    this.renderPass = new RenderPass(scene, camera);
+    this.composer.addPass(this.renderPass);
+
+    // Add pixelation with outline pass
+    this.pixelationPass = new PixelationPass(
+      1,     // Pixel size (1 for minimal pixelation, best quality)
+      0.7,   // Outline strength (0.7 for visible but not overwhelming)
+      0.25   // Outline threshold (0.25 to catch sprite edges and white fringes)
+    );
+    this.composer.addPass(this.pixelationPass);
+
+    // Optional: Add very subtle anti-aliasing for the pixelated edges
+    // This helps smooth the outlines without losing the pixel art feel
+    const smaaEffect = new SMAAEffect({
+      preset: SMAAPreset.LOW,
+      edgeDetectionMode: 1
+    });
+    const smaaPass = new EffectPass(camera, smaaEffect);
+    smaaPass.renderToScreen = true;
+    this.composer.addPass(smaaPass);
+
+    console.log('🎨 Post-processing initialized with pixelation and outline effects');
+  }
+
+  render(deltaTime: number): void {
+    if (this.enabled) {
+      this.composer.render(deltaTime);
+    }
+  }
+
+  setSize(width: number, height: number): void {
+    this.composer.setSize(width, height);
+  }
+
+  setPixelSize(size: number): void {
+    this.pixelationPass.setPixelSize(size);
+  }
+
+  setOutlineStrength(strength: number): void {
+    this.pixelationPass.setOutlineStrength(strength);
+  }
+
+  setOutlineThreshold(threshold: number): void {
+    this.pixelationPass.setOutlineThreshold(threshold);
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  dispose(): void {
+    this.composer.dispose();
+  }
+}

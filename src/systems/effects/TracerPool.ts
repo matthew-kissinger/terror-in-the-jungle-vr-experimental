@@ -20,18 +20,18 @@ export class TracerPool {
   constructor(scene: THREE.Scene, maxTracers = 64) {
     this.scene = scene;
     this.maxTracers = maxTracers;
-    // Make tracers invisible - we only need them for hit detection tracking
+    // Enhanced tracers for night combat visibility
     this.tracerMaterial = new THREE.LineBasicMaterial({
-      color: 0xffaa00,
-      linewidth: 1,
-      opacity: 0,  // Fully transparent
+      color: 0xff9944, // Orange-red tracer
+      linewidth: 2,
+      opacity: 0.9,  // Highly visible in darkness
       transparent: true
     });
-    // Secondary glow material also invisible
+    // Secondary glow for enhanced night visibility
     this.glowMaterial = new THREE.LineBasicMaterial({
-      color: 0xffff88,
-      linewidth: 1,
-      opacity: 0,  // Fully transparent
+      color: 0xffdd66, // Bright yellow-orange glow
+      linewidth: 3,
+      opacity: 0.5,  // Visible glow effect
       transparent: true
     });
 

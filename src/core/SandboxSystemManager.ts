@@ -125,6 +125,7 @@ export class SandboxSystemManager {
     this.playerHealthSystem.setTicketSystem(this.ticketSystem);
     this.playerHealthSystem.setPlayerController(this.playerController);
     this.playerHealthSystem.setFirstPersonWeapon(this.firstPersonWeapon);
+    this.playerHealthSystem.setCamera(camera);
     this.minimapSystem.setZoneManager(this.zoneManager);
     this.minimapSystem.setCombatantSystem(this.combatantSystem);
     this.zoneManager.setCombatantSystem(this.combatantSystem);

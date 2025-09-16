@@ -53,6 +53,9 @@ export class CombatantFactory {
       updatePriority: 0,
       lodLevel: 'high',
 
+      // 40% of OPFOR are objective-focused (less aggressive)
+      isObjectiveFocused: faction === Faction.OPFOR && Math.random() < 0.4,
+
       ...squadData
     };
 
@@ -137,34 +140,34 @@ export class CombatantFactory {
     if (faction === Faction.OPFOR) {
       baseProfile = {
         reactionDelayMs: role === 'leader' ? 400 : 600,
-        aimJitterAmplitude: role === 'leader' ? 0.3 : 0.5,
+        aimJitterAmplitude: role === 'leader' ? 1.2 : 1.8, // Increased from 0.3/0.5
         burstLength: role === 'leader' ? 4 : 3,
         burstPauseMs: role === 'leader' ? 800 : 1000,
-        leadingErrorFactor: role === 'leader' ? 0.9 : 0.8,
+        leadingErrorFactor: role === 'leader' ? 0.7 : 0.5, // Reduced accuracy
         suppressionResistance: role === 'leader' ? 0.8 : 0.6,
         visualRange: 130,
         fieldOfView: 130,
-        firstShotAccuracy: 0.15,
-        burstDegradation: 2.0
+        firstShotAccuracy: 0.4, // Increased from 0.15 (less accurate)
+        burstDegradation: 3.5 // Increased from 2.0
       };
     } else {
       baseProfile = {
         reactionDelayMs: role === 'leader' ? 450 : 650,
-        aimJitterAmplitude: role === 'leader' ? 0.4 : 0.6,
+        aimJitterAmplitude: role === 'leader' ? 1.5 : 2.0, // Increased from 0.4/0.6
         burstLength: role === 'leader' ? 3 : 3,
         burstPauseMs: role === 'leader' ? 900 : 1100,
-        leadingErrorFactor: role === 'leader' ? 0.85 : 0.75,
+        leadingErrorFactor: role === 'leader' ? 0.6 : 0.4, // Reduced accuracy
         suppressionResistance: role === 'leader' ? 0.7 : 0.5,
         visualRange: 120,
         fieldOfView: 120,
-        firstShotAccuracy: 0.2,
-        burstDegradation: 2.5
+        firstShotAccuracy: 0.5, // Increased from 0.2 (less accurate)
+        burstDegradation: 4.0 // Increased from 2.5
       };
     }
 
     // Add some randomization for variety
     baseProfile.reactionDelayMs += (Math.random() - 0.5) * 100;
-    baseProfile.aimJitterAmplitude += (Math.random() - 0.5) * 0.1;
+    baseProfile.aimJitterAmplitude += (Math.random() - 0.5) * 0.3; // Increased variation
 
     return baseProfile;
   }

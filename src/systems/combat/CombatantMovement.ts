@@ -62,14 +62,26 @@ export class CombatantMovement {
       }
     }
 
-    // Leaders: head toward nearest capturable zone
+    // Leaders: head toward a random capturable zone
     if (combatant.squadRole === 'leader' && this.zoneManager) {
-      const targetZone = this.zoneManager.getNearestCapturableZone(
-        combatant.position,
-        combatant.faction
-      );
-      if (targetZone) {
-        const toZone = new THREE.Vector3().subVectors(targetZone.position, combatant.position);
+      // Get all capturable zones for this faction
+      const allZones = this.zoneManager.getAllZones();
+      const capturableZones = allZones.filter(zone => {
+        // Can capture if neutral or enemy-owned (not home bases)
+        return !zone.isHomeBase && zone.owner !== combatant.faction;
+      });
+
+      if (capturableZones.length > 0) {
+        // Select a random zone if we don't have a destination or reached it
+        if (!combatant.destinationPoint ||
+            combatant.position.distanceTo(combatant.destinationPoint) < 10) {
+          const randomZone = capturableZones[Math.floor(Math.random() * capturableZones.length)];
+          combatant.destinationPoint = randomZone.position.clone();
+          console.log(`🎯 ${combatant.faction} squad targeting zone: ${randomZone.id}`);
+        }
+
+        // Move toward the selected zone
+        const toZone = new THREE.Vector3().subVectors(combatant.destinationPoint, combatant.position);
         const distance = toZone.length();
         toZone.normalize();
         const speed = distance > 5 ? 4 : 0;

@@ -35,10 +35,16 @@ export class PixelArtSandbox {
   private setupEventListeners(): void {
     window.addEventListener('resize', () => this.sandboxRenderer.onWindowResize());
 
-    // Performance monitoring
+    // Performance monitoring and post-processing controls
     window.addEventListener('keydown', (event) => {
       if (event.key === 'F1') {
         this.togglePerformanceStats();
+      } else if (event.key === 'p' || event.key === 'P') {
+        this.togglePostProcessing();
+      } else if (event.key === '[') {
+        this.adjustPixelSize(-1);
+      } else if (event.key === ']') {
+        this.adjustPixelSize(1);
       }
     });
   }
@@ -183,6 +189,23 @@ export class PixelArtSandbox {
     console.log(`Chunks tracked: ${debugInfo.chunksTracked}`);
   }
 
+  private togglePostProcessing(): void {
+    if (!this.gameStarted || !this.sandboxRenderer.postProcessing) return;
+
+    const enabled = !this.sandboxRenderer.postProcessing.isEnabled();
+    this.sandboxRenderer.postProcessing.setEnabled(enabled);
+    console.log(`🎨 Post-processing ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  private currentPixelSize = 1; // Start at 1 for best quality
+  private adjustPixelSize(delta: number): void {
+    if (!this.gameStarted || !this.sandboxRenderer.postProcessing) return;
+
+    this.currentPixelSize = Math.max(1, Math.min(8, this.currentPixelSize + delta));
+    this.sandboxRenderer.postProcessing.setPixelSize(this.currentPixelSize);
+    console.log(`🎮 Pixel size: ${this.currentPixelSize}`);
+  }
+
   private showWelcomeMessage(): void {
     const debugInfo = this.systemManager.globalBillboardSystem.getDebugInfo();
     const combatStats = this.systemManager.combatantSystem.getCombatStats();
@@ -226,13 +249,18 @@ Have fun!
     // Update skybox position
     this.systemManager.skybox.updatePosition(this.sandboxRenderer.camera.position);
 
-    // Render the main scene
-    this.sandboxRenderer.renderer.render(
-      this.sandboxRenderer.scene,
-      this.sandboxRenderer.camera
-    );
+    // Render the main scene with post-processing
+    if (this.sandboxRenderer.postProcessing) {
+      this.sandboxRenderer.postProcessing.render(deltaTime);
+    } else {
+      // Fallback to regular rendering if post-processing is disabled
+      this.sandboxRenderer.renderer.render(
+        this.sandboxRenderer.scene,
+        this.sandboxRenderer.camera
+      );
+    }
 
-    // Render weapon overlay
+    // Render weapon overlay (after post-processing)
     if (this.systemManager.firstPersonWeapon) {
       this.systemManager.firstPersonWeapon.renderWeapon(this.sandboxRenderer.renderer);
     }

@@ -36,15 +36,22 @@ export class CombatantAI {
     const enemy = this.findNearestEnemy(combatant, playerPosition, allCombatants);
     if (enemy) {
       const targetPos = enemy.id === 'PLAYER' ? playerPosition : enemy.position;
+      const distance = combatant.position.distanceTo(targetPos);
       const toTarget = new THREE.Vector3().subVectors(targetPos, combatant.position).normalize();
       combatant.rotation = Math.atan2(toTarget.z, toTarget.x);
 
       if (this.canSeeTarget(combatant, enemy, playerPosition)) {
-        combatant.state = CombatantState.ALERT;
-        combatant.target = enemy;
-        combatant.reactionTimer = combatant.skillProfile.reactionDelayMs / 1000;
-        combatant.alertTimer = 1.5;
-        console.log(`🎯 ${combatant.faction} soldier spotted enemy!`);
+        // Check if should engage based on distance and objective focus
+        if (this.shouldEngage(combatant, distance)) {
+          combatant.state = CombatantState.ALERT;
+          combatant.target = enemy;
+
+          // Add range-based reaction delay
+          const rangeDelay = Math.floor(distance / 30) * 250; // +250ms per 30 units
+          combatant.reactionTimer = (combatant.skillProfile.reactionDelayMs + rangeDelay) / 1000;
+          combatant.alertTimer = 1.5;
+          console.log(`🎯 ${combatant.faction} soldier spotted enemy at ${Math.round(distance)}m!`);
+        }
       }
     }
   }
@@ -216,6 +223,33 @@ export class CombatantAI {
     const halfFov = THREE.MathUtils.degToRad(combatant.skillProfile.fieldOfView / 2);
 
     return angle <= halfFov;
+  }
+
+  private shouldEngage(combatant: Combatant, distance: number): boolean {
+    // Objective-focused combatants only engage at close range or when shot
+    if (combatant.isObjectiveFocused) {
+      const timeSinceHit = (Date.now() - combatant.lastHitTime) / 1000;
+      const recentlyShot = timeSinceHit < 3.0;
+
+      // Only engage if close or recently shot
+      if (distance > 30 && !recentlyShot) {
+        return false;
+      }
+    }
+
+    // Distance-based engagement probability
+    let engageProbability = 1.0;
+    if (distance < 30) {
+      engageProbability = 1.0; // Always engage at close range
+    } else if (distance < 60) {
+      engageProbability = 0.8; // 80% chance at mid range
+    } else if (distance < 90) {
+      engageProbability = 0.5; // 50% chance at long range
+    } else {
+      engageProbability = 0.2; // 20% chance at extreme range
+    }
+
+    return Math.random() < engageProbability;
   }
 
   private countNearbyEnemies(
