@@ -1,0 +1,190 @@
+import * as THREE from 'three';
+import { GameSystem } from '../types';
+import { AssetLoader } from '../systems/assets/AssetLoader';
+import { PlayerController } from '../systems/player/PlayerController';
+import { CombatantSystem } from '../systems/combat/CombatantSystem';
+import { Skybox } from '../systems/environment/Skybox';
+import { ImprovedChunkManager } from '../systems/terrain/ImprovedChunkManager';
+import { GlobalBillboardSystem } from '../systems/world/billboard/GlobalBillboardSystem';
+import { WaterSystem } from '../systems/environment/WaterSystem';
+import { FirstPersonWeapon } from '../systems/player/FirstPersonWeapon';
+import { ZoneManager } from '../systems/world/ZoneManager';
+import { HUDSystem } from '../ui/hud/HUDSystem';
+import { TicketSystem } from '../systems/world/TicketSystem';
+import { PlayerHealthSystem } from '../systems/player/PlayerHealthSystem';
+import { MinimapSystem } from '../ui/minimap/MinimapSystem';
+import { AudioManager } from '../systems/audio/AudioManager';
+
+export class SandboxSystemManager {
+  private systems: GameSystem[] = [];
+
+  // Game systems
+  public assetLoader!: AssetLoader;
+  public chunkManager!: ImprovedChunkManager;
+  public globalBillboardSystem!: GlobalBillboardSystem;
+  public playerController!: PlayerController;
+  public combatantSystem!: CombatantSystem;
+  public skybox!: Skybox;
+  public waterSystem!: WaterSystem;
+  public firstPersonWeapon!: FirstPersonWeapon;
+  public zoneManager!: ZoneManager;
+  public hudSystem!: HUDSystem;
+  public ticketSystem!: TicketSystem;
+  public playerHealthSystem!: PlayerHealthSystem;
+  public minimapSystem!: MinimapSystem;
+  public audioManager!: AudioManager;
+
+  async initializeSystems(
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    onProgress: (phase: string, progress: number) => void
+  ): Promise<void> {
+    console.log('🔧 Initializing game systems...');
+
+    // Phase 1: Core systems
+    onProgress('core', 0);
+
+    this.assetLoader = new AssetLoader();
+    onProgress('core', 0.5);
+
+    this.globalBillboardSystem = new GlobalBillboardSystem(scene, camera, this.assetLoader);
+    this.chunkManager = new ImprovedChunkManager(scene, camera, this.assetLoader, this.globalBillboardSystem);
+    onProgress('core', 1);
+
+    // Phase 2: Load textures
+    onProgress('textures', 0);
+    await this.assetLoader.init();
+    onProgress('textures', 1);
+
+    // Phase 3: Load audio
+    onProgress('audio', 0);
+    this.audioManager = new AudioManager(scene, camera);
+    await this.audioManager.init();
+    onProgress('audio', 1);
+
+    // Phase 4: Initialize world systems
+    onProgress('world', 0);
+
+    this.playerController = new PlayerController(camera);
+    this.combatantSystem = new CombatantSystem(scene, camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
+    this.skybox = new Skybox(scene);
+    this.waterSystem = new WaterSystem(scene, this.assetLoader);
+    this.firstPersonWeapon = new FirstPersonWeapon(scene, camera, this.assetLoader);
+    this.zoneManager = new ZoneManager(scene);
+    this.hudSystem = new HUDSystem();
+    this.ticketSystem = new TicketSystem();
+    this.playerHealthSystem = new PlayerHealthSystem();
+    this.minimapSystem = new MinimapSystem(camera);
+
+    this.connectSystems(scene, camera);
+
+    // Add systems to update list
+    this.systems = [
+      this.assetLoader,
+      this.audioManager,
+      this.globalBillboardSystem,
+      this.chunkManager,
+      this.waterSystem,
+      this.playerController,
+      this.firstPersonWeapon,
+      this.combatantSystem,
+      this.zoneManager,
+      this.ticketSystem,
+      this.playerHealthSystem,
+      this.minimapSystem,
+      this.hudSystem,
+      this.skybox
+    ];
+
+    onProgress('world', 0.5);
+
+    // Initialize all systems
+    for (const system of this.systems) {
+      await system.init();
+    }
+
+    onProgress('world', 1);
+  }
+
+  private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+    // Connect systems with chunk manager
+    this.playerController.setChunkManager(this.chunkManager);
+    this.combatantSystem.setChunkManager(this.chunkManager);
+    this.firstPersonWeapon.setPlayerController(this.playerController);
+    this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
+    this.firstPersonWeapon.setHUDSystem(this.hudSystem);
+    this.hudSystem.setCombatantSystem(this.combatantSystem);
+    this.hudSystem.setZoneManager(this.zoneManager);
+    this.hudSystem.setTicketSystem(this.ticketSystem);
+    this.ticketSystem.setZoneManager(this.zoneManager);
+    this.combatantSystem.setTicketSystem(this.ticketSystem);
+    this.combatantSystem.setPlayerHealthSystem(this.playerHealthSystem);
+    this.combatantSystem.setZoneManager(this.zoneManager);
+    this.combatantSystem.setHUDSystem(this.hudSystem);
+    this.playerHealthSystem.setZoneManager(this.zoneManager);
+    this.playerHealthSystem.setTicketSystem(this.ticketSystem);
+    this.playerHealthSystem.setPlayerController(this.playerController);
+    this.playerHealthSystem.setFirstPersonWeapon(this.firstPersonWeapon);
+    this.minimapSystem.setZoneManager(this.zoneManager);
+    this.minimapSystem.setCombatantSystem(this.combatantSystem);
+    this.zoneManager.setCombatantSystem(this.combatantSystem);
+    this.zoneManager.setCamera(camera);
+    this.zoneManager.setChunkManager(this.chunkManager);
+
+    // Connect audio manager
+    this.firstPersonWeapon.setAudioManager(this.audioManager);
+    this.combatantSystem.setAudioManager(this.audioManager);
+  }
+
+  async preGenerateSpawnArea(spawnPos: THREE.Vector3): Promise<void> {
+    console.log(`Pre-generating spawn areas for both factions...`);
+
+    if (this.chunkManager) {
+      // Generate US base chunks
+      const usBasePos = new THREE.Vector3(0, 0, -50);
+      console.log('🇺🇸 Generating US base chunks...');
+      this.chunkManager.updatePlayerPosition(usBasePos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Generate OPFOR base chunks
+      const opforBasePos = new THREE.Vector3(0, 0, 145);
+      console.log('🚩 Generating OPFOR base chunks...');
+      this.chunkManager.updatePlayerPosition(opforBasePos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Generate middle battlefield chunks
+      const centerPos = new THREE.Vector3(0, 0, 50);
+      console.log('⚔️ Generating battlefield chunks...');
+      this.chunkManager.updatePlayerPosition(centerPos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Return to player spawn position
+      this.chunkManager.updatePlayerPosition(spawnPos);
+      this.chunkManager.update(0.01);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Initialize zones after chunk generation
+      console.log('🚩 Initializing zones after chunk generation...');
+      this.zoneManager.initializeZones();
+    }
+  }
+
+  updateSystems(deltaTime: number): void {
+    for (const system of this.systems) {
+      system.update(deltaTime);
+    }
+  }
+
+  getSystems(): GameSystem[] {
+    return this.systems;
+  }
+
+  dispose(): void {
+    for (const system of this.systems) {
+      system.dispose();
+    }
+  }
+}
