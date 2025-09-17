@@ -35,11 +35,17 @@ export class ImprovedChunkManager implements GameSystem {
   
   // Performance settings
   private updateTimer = 0;
-  private readonly UPDATE_INTERVAL = 0.25;  // More frequent updates
-  private readonly MAX_CHUNKS_PER_FRAME = 2; // Load 2 chunks per frame for faster loading
-  private readonly LOAD_DELAY = 50; // Reduced delay for quicker loading
+  private readonly UPDATE_INTERVAL = 0.25;  // Chunk system update cadence
+  private readonly MAX_CHUNKS_PER_FRAME = 1; // Limit ingestion to reduce spikes
+  private readonly LOAD_DELAY = 100; // Slow background loader slightly to avoid bursts
   private lastLoadTime = 0;
   private isLoading = false;
+
+  // Adaptive render distance
+  private fpsEma = 60;
+  private readonly FPS_EMA_ALPHA = 0.1;
+  private lastAdaptTime = 0;
+  private readonly ADAPT_COOLDOWN_MS = 1500;
 
   constructor(
     scene: THREE.Scene, 
@@ -81,6 +87,21 @@ export class ImprovedChunkManager implements GameSystem {
 
   update(deltaTime: number): void {
     this.updateTimer += deltaTime;
+    // Track FPS EMA
+    this.fpsEma = this.fpsEma * (1 - this.FPS_EMA_ALPHA) + (1 / Math.max(0.001, deltaTime)) * this.FPS_EMA_ALPHA;
+    // Adapt render distance gradually to maintain stability
+    const nowMs = performance.now();
+    if (nowMs - this.lastAdaptTime > this.ADAPT_COOLDOWN_MS) {
+      const targetMin = 6; // keep near field always loaded
+      const targetMax = Math.max(8, this.config.renderDistance); // allow growth where possible
+      if (this.fpsEma < 28 && this.config.renderDistance > targetMin) {
+        this.setRenderDistance(this.config.renderDistance - 1);
+        this.lastAdaptTime = nowMs;
+      } else if (this.fpsEma > 55 && this.config.renderDistance < 12) {
+        this.setRenderDistance(this.config.renderDistance + 1);
+        this.lastAdaptTime = nowMs;
+      }
+    }
     
     if (this.updateTimer >= this.UPDATE_INTERVAL) {
       this.updateTimer = 0;
@@ -341,5 +362,14 @@ export class ImprovedChunkManager implements GameSystem {
 
   getLoadingCount(): number {
     return this.loadingChunks.size;
+  }
+
+  // Game mode configuration
+  setRenderDistance(distance: number): void {
+    this.config.renderDistance = distance;
+    this.config.loadDistance = distance + 2;
+    console.log(`🎮 Chunk render distance set to ${distance}`);
+    // Trigger chunk reload
+    this.updateLoadQueue();
   }
 }

@@ -39,21 +39,25 @@ export class PlayerHealthSystem implements GameSystem {
 
   // Camera reference for damage indicators
   private camera?: THREE.Camera;
+  private ticketSystem?: TicketSystem;
 
   constructor() {
     this.ui = new PlayerHealthUI();
     this.effects = new PlayerHealthEffects();
-    this.respawnManager = new PlayerRespawnManager();
+    // Respawn manager will be set later
+    this.respawnManager = null as any;
 
     this.setupCallbacks();
   }
 
   private setupCallbacks(): void {
     // Setup respawn callbacks
-    this.respawnManager.setRespawnCallback((position: THREE.Vector3) => {
+    if (this.respawnManager) {
+      this.respawnManager.setRespawnCallback((position: THREE.Vector3) => {
       this.playerState.health = this.playerState.maxHealth;
       this.playerState.isAlive = true;
       this.playerState.isDead = false;
+      // Reset and hand over to spawn-protection application from respawn flow
       this.playerState.invulnerabilityTime = 0;
 
       this.effects.clearDamageIndicators();
@@ -70,6 +74,7 @@ export class PlayerHealthSystem implements GameSystem {
     const spawnBaseBtn = this.ui.getSpawnBaseButton();
     if (spawnBaseBtn) {
       spawnBaseBtn.addEventListener('click', () => this.respawnManager.respawnAtBase());
+    }
     }
   }
 
@@ -173,6 +178,14 @@ export class PlayerHealthSystem implements GameSystem {
     return false;
   }
 
+  // Apply spawn protection for a duration (seconds)
+  applySpawnProtection(durationSeconds: number): void {
+    if (durationSeconds <= 0) return;
+    this.playerState.invulnerabilityTime = durationSeconds;
+    this.ui.setSpawnProtection(true);
+    console.log(`🛡️ Spawn protection applied for ${durationSeconds}s`);
+  }
+
   private onPlayerDeath(): void {
     if (this.playerState.isDead) return;
 
@@ -209,19 +222,31 @@ export class PlayerHealthSystem implements GameSystem {
   // System connections
 
   setZoneManager(manager: ZoneManager): void {
-    this.respawnManager.setZoneManager(manager);
+    if (this.respawnManager) {
+      this.respawnManager.setZoneManager(manager);
+    }
   }
 
   setTicketSystem(system: TicketSystem): void {
-    this.respawnManager.setTicketSystem(system);
+    // TicketSystem is now handled through GameModeManager
+    this.ticketSystem = system;
   }
 
   setPlayerController(playerController: any): void {
-    this.respawnManager.setPlayerController(playerController);
+    if (this.respawnManager) {
+      this.respawnManager.setPlayerController(playerController);
+    }
   }
 
   setFirstPersonWeapon(weapon: any): void {
-    this.respawnManager.setFirstPersonWeapon(weapon);
+    if (this.respawnManager) {
+      this.respawnManager.setFirstPersonWeapon(weapon);
+    }
+  }
+
+  setRespawnManager(respawnManager: PlayerRespawnManager): void {
+    this.respawnManager = respawnManager;
+    this.setupCallbacks();
   }
 
   setCamera(camera: THREE.Camera): void {

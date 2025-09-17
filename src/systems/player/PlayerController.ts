@@ -2,10 +2,13 @@ import * as THREE from 'three';
 import { GameSystem, PlayerState } from '../../types';
 import { MathUtils } from '../../utils/Math';
 import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
+import { GameModeManager } from '../world/GameModeManager';
+import { Faction } from '../combat/types';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
   private chunkManager?: ImprovedChunkManager;
+  private gameModeManager?: GameModeManager;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -20,9 +23,10 @@ export class PlayerController implements GameSystem {
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
-    
+
+    // Default position - will be updated when game mode is set
     this.playerState = {
-      position: new THREE.Vector3(0, 5, -50), // Spawn at US Base location
+      position: new THREE.Vector3(0, 5, -50),
       velocity: new THREE.Vector3(0, 0, 0),
       speed: 10,
       runSpeed: 20,
@@ -37,9 +41,15 @@ export class PlayerController implements GameSystem {
   }
 
   async init(): Promise<void> {
+    // Get spawn position from game mode if available
+    if (this.gameModeManager) {
+      const spawnPos = this.getSpawnPosition();
+      this.playerState.position.copy(spawnPos);
+    }
+
     // Set initial camera position
     this.camera.position.copy(this.playerState.position);
-    console.log('Player controller initialized');
+    console.log(`Player controller initialized at ${this.playerState.position.x.toFixed(1)}, ${this.playerState.position.y.toFixed(1)}, ${this.playerState.position.z.toFixed(1)}`);
   }
 
   update(deltaTime: number): void {
@@ -308,5 +318,36 @@ Escape - Release pointer lock
 
   setChunkManager(chunkManager: ImprovedChunkManager): void {
     this.chunkManager = chunkManager;
+  }
+
+  setGameModeManager(gameModeManager: GameModeManager): void {
+    this.gameModeManager = gameModeManager;
+  }
+
+  private getSpawnPosition(): THREE.Vector3 {
+    if (!this.gameModeManager) {
+      return new THREE.Vector3(0, 5, -50); // Default fallback
+    }
+
+    const config = this.gameModeManager.getCurrentConfig();
+
+    // Find the main US HQ
+    const usMainHQ = config.zones.find(z =>
+      z.isHomeBase &&
+      z.owner === Faction.US &&
+      (z.id.includes('main') || z.id === 'us_base')
+    );
+
+    if (usMainHQ) {
+      // Spawn at main HQ with player height
+      const spawnPos = usMainHQ.position.clone();
+      spawnPos.y = 5; // Player height
+      console.log(`🎯 Spawning at US main HQ: ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+      return spawnPos;
+    }
+
+    // Fallback to default
+    console.warn('Could not find US main HQ, using default spawn');
+    return new THREE.Vector3(0, 5, -50);
   }
 }

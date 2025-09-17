@@ -14,6 +14,10 @@ import { TicketSystem } from '../systems/world/TicketSystem';
 import { PlayerHealthSystem } from '../systems/player/PlayerHealthSystem';
 import { MinimapSystem } from '../ui/minimap/MinimapSystem';
 import { AudioManager } from '../systems/audio/AudioManager';
+import { GameModeManager } from '../systems/world/GameModeManager';
+import { GameMode } from '../config/gameModes';
+import { PlayerRespawnManager } from '../systems/player/PlayerRespawnManager';
+import { FullMapSystem } from '../ui/map/FullMapSystem';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -33,6 +37,9 @@ export class SandboxSystemManager {
   public playerHealthSystem!: PlayerHealthSystem;
   public minimapSystem!: MinimapSystem;
   public audioManager!: AudioManager;
+  public gameModeManager!: GameModeManager;
+  public playerRespawnManager!: PlayerRespawnManager;
+  public fullMapSystem!: FullMapSystem;
 
   async initializeSystems(
     scene: THREE.Scene,
@@ -71,10 +78,13 @@ export class SandboxSystemManager {
     this.waterSystem = new WaterSystem(scene, this.assetLoader);
     this.firstPersonWeapon = new FirstPersonWeapon(scene, camera, this.assetLoader);
     this.zoneManager = new ZoneManager(scene);
-    this.hudSystem = new HUDSystem();
     this.ticketSystem = new TicketSystem();
     this.playerHealthSystem = new PlayerHealthSystem();
+    this.playerRespawnManager = new PlayerRespawnManager(scene, camera);
+    this.hudSystem = new HUDSystem(camera, this.ticketSystem, this.playerHealthSystem, this.playerRespawnManager);
     this.minimapSystem = new MinimapSystem(camera);
+    this.fullMapSystem = new FullMapSystem(camera);
+    this.gameModeManager = new GameModeManager();
 
     this.connectSystems(scene, camera);
 
@@ -91,9 +101,12 @@ export class SandboxSystemManager {
       this.zoneManager,
       this.ticketSystem,
       this.playerHealthSystem,
+      this.playerRespawnManager,
       this.minimapSystem,
+      this.fullMapSystem,
       this.hudSystem,
-      this.skybox
+      this.skybox,
+      this.gameModeManager
     ];
 
     onProgress('world', 0.5);
@@ -109,6 +122,7 @@ export class SandboxSystemManager {
   private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
     // Connect systems with chunk manager
     this.playerController.setChunkManager(this.chunkManager);
+    this.playerController.setGameModeManager(this.gameModeManager);
     this.combatantSystem.setChunkManager(this.chunkManager);
     this.firstPersonWeapon.setPlayerController(this.playerController);
     this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
@@ -120,14 +134,19 @@ export class SandboxSystemManager {
     this.combatantSystem.setTicketSystem(this.ticketSystem);
     this.combatantSystem.setPlayerHealthSystem(this.playerHealthSystem);
     this.combatantSystem.setZoneManager(this.zoneManager);
+    this.combatantSystem.setGameModeManager(this.gameModeManager);
     this.combatantSystem.setHUDSystem(this.hudSystem);
     this.playerHealthSystem.setZoneManager(this.zoneManager);
     this.playerHealthSystem.setTicketSystem(this.ticketSystem);
     this.playerHealthSystem.setPlayerController(this.playerController);
     this.playerHealthSystem.setFirstPersonWeapon(this.firstPersonWeapon);
     this.playerHealthSystem.setCamera(camera);
+    this.playerHealthSystem.setRespawnManager(this.playerRespawnManager);
     this.minimapSystem.setZoneManager(this.zoneManager);
     this.minimapSystem.setCombatantSystem(this.combatantSystem);
+    this.fullMapSystem.setZoneManager(this.zoneManager);
+    this.fullMapSystem.setCombatantSystem(this.combatantSystem);
+    this.fullMapSystem.setGameModeManager(this.gameModeManager);
     this.zoneManager.setCombatantSystem(this.combatantSystem);
     this.zoneManager.setCamera(camera);
     this.zoneManager.setChunkManager(this.chunkManager);
@@ -135,6 +154,22 @@ export class SandboxSystemManager {
     // Connect audio manager
     this.firstPersonWeapon.setAudioManager(this.audioManager);
     this.combatantSystem.setAudioManager(this.audioManager);
+
+    // Connect respawn manager
+    this.playerRespawnManager.setPlayerHealthSystem(this.playerHealthSystem);
+    this.playerRespawnManager.setZoneManager(this.zoneManager);
+    this.playerRespawnManager.setGameModeManager(this.gameModeManager);
+    this.playerRespawnManager.setPlayerController(this.playerController);
+    this.playerRespawnManager.setFirstPersonWeapon(this.firstPersonWeapon);
+
+    // Connect game mode manager to systems
+    this.gameModeManager.connectSystems(
+      this.zoneManager,
+      this.combatantSystem,
+      this.ticketSystem,
+      this.chunkManager,
+      this.minimapSystem
+    );
   }
 
   async preGenerateSpawnArea(spawnPos: THREE.Vector3): Promise<void> {
@@ -187,5 +222,9 @@ export class SandboxSystemManager {
     for (const system of this.systems) {
       system.dispose();
     }
+  }
+
+  setGameMode(mode: GameMode): void {
+    this.gameModeManager.setGameMode(mode);
   }
 }

@@ -4,6 +4,7 @@ import '../style.css';
 import { LoadingScreen } from '../ui/loading/LoadingScreen';
 import { SandboxSystemManager } from './SandboxSystemManager';
 import { SandboxRenderer } from './SandboxRenderer';
+import { GameMode } from '../config/gameModes';
 
 export class PixelArtSandbox {
   private loadingScreen: LoadingScreen;
@@ -50,9 +51,9 @@ export class PixelArtSandbox {
   }
 
   private setupMenuCallbacks(): void {
-    // Play button starts the game
-    this.loadingScreen.onPlay(() => {
-      this.startGame();
+    // Play button starts the game with selected mode
+    this.loadingScreen.onPlay((mode: GameMode) => {
+      this.startGameWithMode(mode);
     });
 
     // Settings button (placeholder)
@@ -115,11 +116,20 @@ export class PixelArtSandbox {
     console.log('📦 Asset check complete');
   }
 
-  private startGame(): void {
+  private startGameWithMode(mode: GameMode): void {
     if (!this.isInitialized || this.gameStarted) return;
 
-    console.log('🎮 Starting game...');
+    console.log(`🎮 Starting game with mode: ${mode}`);
     this.gameStarted = true;
+
+    // Set the game mode in the system manager
+    this.systemManager.setGameMode(mode);
+
+    this.startGame();
+  }
+
+  private startGame(): void {
+    if (!this.gameStarted) return;
 
     // Hide menu and show loading
     this.loadingScreen.hide();
@@ -133,6 +143,19 @@ export class PixelArtSandbox {
 
       // Hide loading indicator
       this.sandboxRenderer.hideSpawnLoadingIndicator();
+
+      // Move player to mode HQ spawn before enabling controls
+      try {
+        const gm = (this.systemManager as any).gameModeManager;
+        const cfg = gm.getCurrentConfig();
+        const Faction = { US: 'US', OPFOR: 'OPFOR' } as any;
+        const spawn = cfg.zones.find((z: any) => z.isHomeBase && z.owner === Faction.US && (z.id.includes('main') || z.id === 'us_base'));
+        if (spawn) {
+          const pos = spawn.position.clone();
+          pos.y = 5;
+          this.systemManager.playerController.setPosition(pos);
+        }
+      } catch { /* ignore */ }
 
       // Enable controls after brief delay
       setTimeout(() => {

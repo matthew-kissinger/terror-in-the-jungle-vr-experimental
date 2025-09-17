@@ -18,7 +18,7 @@ export interface GameState {
 export class TicketSystem implements GameSystem {
   private usTickets = 300;
   private opforTickets = 300;
-  private readonly maxTickets = 300;
+  private maxTickets = 300;
 
   private zoneManager?: ZoneManager;
   private gameState: GameState = {
@@ -29,9 +29,9 @@ export class TicketSystem implements GameSystem {
 
   // Ticket bleed configuration
   private readonly baseBleedRate = 1.0; // tickets per second when losing all zones
-  private readonly deathPenalty = 2; // tickets lost per death
+  private deathPenalty = 2; // tickets lost per death
   private readonly setupDuration = 10; // seconds
-  private readonly combatDuration = 900; // 15 minutes
+  private combatDuration = 900; // 15 minutes
   private readonly overtimeDuration = 120; // 2 minutes
 
   // Event callbacks
@@ -244,6 +244,24 @@ export class TicketSystem implements GameSystem {
 
   setZoneManager(manager: ZoneManager): void {
     this.zoneManager = manager;
+  }
+
+  // Game mode configuration methods
+  setMaxTickets(tickets: number): void {
+    this.maxTickets = tickets;
+    this.usTickets = tickets;
+    this.opforTickets = tickets;
+    console.log(`🎮 Ticket count set to ${tickets} per team`);
+  }
+
+  setMatchDuration(duration: number): void {
+    this.combatDuration = duration;
+    console.log(`🎮 Match duration set to ${duration} seconds`);
+  }
+
+  setDeathPenalty(penalty: number): void {
+    this.deathPenalty = penalty;
+    console.log(`🎮 Death penalty set to ${penalty} tickets`);
   }
 
   setTicketUpdateCallback(callback: (usTickets: number, opforTickets: number) => void): void {

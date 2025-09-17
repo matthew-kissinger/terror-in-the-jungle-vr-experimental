@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { GameSystem } from '../../types';
 import { CombatantSystem } from '../combat/CombatantSystem';
-import { Faction } from '../combat/types';
+import { Faction, CombatantState } from '../combat/types';
 import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { ZoneRenderer } from './ZoneRenderer';
 import { ZoneCaptureLogic } from './ZoneCaptureLogic';
 import { ZoneTerrainAdapter } from './ZoneTerrainAdapter';
+import { GameModeConfig } from '../../config/gameModes';
 
 export enum ZoneState {
   NEUTRAL = 'neutral',
@@ -58,7 +59,7 @@ export class ZoneManager implements GameSystem {
   private terrainAdapter: ZoneTerrainAdapter;
 
   // Zone configuration
-  private readonly CAPTURE_RADIUS = 15;
+  private gameModeConfig?: GameModeConfig;
 
   // Zone tracking
   private occupants: Map<string, { us: number; opfor: number }> = new Map();
@@ -76,19 +77,20 @@ export class ZoneManager implements GameSystem {
   }
 
   private createDefaultZones(): void {
-    // Find suitable positions with good terrain
-    const usBasePos = this.terrainAdapter.findSuitableZonePosition(new THREE.Vector3(0, 0, -50), 30);
-    const opforBasePos = this.terrainAdapter.findSuitableZonePosition(new THREE.Vector3(0, 0, 145), 30);
+    if (!this.gameModeConfig) {
+      // Default Zone Control configuration if no mode is set
+      const usBasePos = this.terrainAdapter.findSuitableZonePosition(new THREE.Vector3(0, 0, -50), 30);
+      const opforBasePos = this.terrainAdapter.findSuitableZonePosition(new THREE.Vector3(0, 0, 145), 30);
 
-    // US Home Base (uncapturable)
-    this.createZone({
-      id: 'us_base',
-      name: 'US Base',
-      position: usBasePos,
-      owner: Faction.US,
-      isHomeBase: true,
-      ticketBleedRate: 0
-    });
+      // US Home Base (uncapturable)
+      this.createZone({
+        id: 'us_base',
+        name: 'US Base',
+        position: usBasePos,
+        owner: Faction.US,
+        isHomeBase: true,
+        ticketBleedRate: 0
+      });
 
     // OPFOR Home Base (uncapturable)
     this.createZone({
@@ -130,12 +132,14 @@ export class ZoneManager implements GameSystem {
       isHomeBase: false,
       ticketBleedRate: 1
     });
+    }
   }
 
   private createZone(config: {
     id: string;
     name: string;
     position: THREE.Vector3;
+    radius?: number;
     owner: Faction | null;
     isHomeBase: boolean;
     ticketBleedRate: number;
@@ -144,14 +148,14 @@ export class ZoneManager implements GameSystem {
       id: config.id,
       name: config.name,
       position: config.position.clone(),
-      radius: this.CAPTURE_RADIUS,
+      radius: config.radius || (this.gameModeConfig?.captureRadius || 15),
       height: 20,
       owner: config.owner,
       state: config.owner ?
         (config.owner === Faction.US ? ZoneState.US_CONTROLLED : ZoneState.OPFOR_CONTROLLED) :
         ZoneState.NEUTRAL,
       captureProgress: config.owner ? 100 : 0,
-      captureSpeed: 1,
+      captureSpeed: this.gameModeConfig?.captureSpeed || 1,
       isHomeBase: config.isHomeBase,
       ticketBleedRate: config.ticketBleedRate,
       currentFlagHeight: 0
@@ -196,7 +200,8 @@ export class ZoneManager implements GameSystem {
     if (this.combatantSystem) {
       const combatants = this.combatantSystem.getAllCombatants();
       combatants.forEach(combatant => {
-        if (combatant.state === 'dead') return;
+        // Skip dead combatants only
+        if ((combatant as any).state === CombatantState.DEAD || (combatant as any).state === 'dead') return;
 
         this.zones.forEach(zone => {
           const distance = combatant.position.distanceTo(zone.position);
@@ -300,6 +305,45 @@ export class ZoneManager implements GameSystem {
   }
 
   // Setters
+
+  setGameModeConfig(config: GameModeConfig): void {
+    this.gameModeConfig = config;
+    this.clearAllZones();
+    this.createZonesFromConfig();
+  }
+
+  private clearAllZones(): void {
+    this.zones.forEach(zone => {
+      this.zoneRenderer.disposeZoneVisuals(zone);
+    });
+    this.zones.clear();
+    this.occupants.clear();
+  }
+
+  private createZonesFromConfig(): void {
+    if (!this.gameModeConfig) return;
+
+    console.log(`🎮 Creating zones for game mode: ${this.gameModeConfig.name}`);
+
+    for (const zoneConfig of this.gameModeConfig.zones) {
+      const position = this.terrainAdapter.findSuitableZonePosition(
+        zoneConfig.position,
+        zoneConfig.radius
+      );
+
+      this.createZone({
+        id: zoneConfig.id,
+        name: zoneConfig.name,
+        position: position,
+        radius: zoneConfig.radius,
+        owner: zoneConfig.owner,
+        isHomeBase: zoneConfig.isHomeBase,
+        ticketBleedRate: zoneConfig.ticketBleedRate
+      });
+    }
+
+    console.log(`✅ Created ${this.zones.size} zones for ${this.gameModeConfig.name}`);
+  }
 
   setCombatantSystem(system: CombatantSystem): void {
     this.combatantSystem = system;

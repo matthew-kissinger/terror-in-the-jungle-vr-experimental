@@ -41,7 +41,7 @@ export class CombatantRenderer {
     const soldierGeometry = new THREE.PlaneGeometry(5, 7);
 
     // Helper to create mesh for faction-state
-    const createFactionMesh = (texture: THREE.Texture, key: string, maxInstances: number = 30) => {
+    const createFactionMesh = (texture: THREE.Texture, key: string, maxInstances: number = 120) => {
       const material = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
@@ -78,9 +78,14 @@ export class CombatantRenderer {
     // Group combatants by faction and state
     const combatantGroups = new Map<string, Combatant[]>();
 
+    const RENDER_DISTANCE = 400; // Do not render AI beyond this distance; simulation still runs
+
     combatants.forEach(combatant => {
       if (combatant.state === CombatantState.DEAD) return;
       if (combatant.isPlayerProxy) return;
+
+      // Skip rendering if far from player
+      if (combatant.position.distanceTo(playerPosition) > RENDER_DISTANCE) return;
 
       // Check if player is behind this enemy combatant
       let isShowingBack = false;
@@ -128,8 +133,10 @@ export class CombatantRenderer {
     combatantGroups.forEach((combatants, key) => {
       const mesh = this.factionMeshes.get(key);
       if (!mesh) return;
-
-      combatants.forEach((combatant, index) => {
+      const capacity = (mesh.instanceMatrix as any).count ?? mesh.count;
+      let written = 0;
+      for (let index = 0; index < combatants.length && index < capacity; index++) {
+        const combatant = combatants[index];
         const isBackTexture = key.includes('_back');
 
         const combatantForward = new THREE.Vector3(
@@ -176,9 +183,10 @@ export class CombatantRenderer {
 
         mesh.setMatrixAt(index, matrix);
         combatant.billboardIndex = index;
-      });
+        written++;
+      }
 
-      mesh.count = combatants.length;
+      mesh.count = written;
       mesh.instanceMatrix.needsUpdate = true;
     });
   }

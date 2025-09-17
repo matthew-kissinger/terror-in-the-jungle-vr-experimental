@@ -16,10 +16,11 @@ export class HUDSystem implements GameSystem {
   private elements: HUDElements;
   private updater: HUDUpdater;
 
-  constructor() {
+  constructor(camera?: any, ticketSystem?: any, playerHealthSystem?: any, playerRespawnManager?: any) {
     this.styles = HUDStyles.getInstance();
     this.elements = new HUDElements();
     this.updater = new HUDUpdater(this.elements);
+    // Parameters are optional for backward compatibility
   }
 
   async init(): Promise<void> {

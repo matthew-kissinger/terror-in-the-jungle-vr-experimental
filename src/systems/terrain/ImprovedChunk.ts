@@ -253,9 +253,12 @@ export class ImprovedChunk {
   private async generateVegetation(): Promise<void> {
     const baseX = this.chunkX * this.size;
     const baseZ = this.chunkZ * this.size;
-    
+
+    // Fixed density calculations - tuned for performance across many chunks
+    const DENSITY_PER_UNIT = 1.0 / 64.0; // Base density: 1 item per 64 square units
+
     // LAYER 1: Dense fern ground cover (covers most areas)
-    const fernCount = Math.floor(this.size * this.size * 0.5); // Increase to ~50% coverage for dense jungle floor
+    const fernCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 8.0);
     for (let i = 0; i < fernCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -273,7 +276,7 @@ export class ImprovedChunk {
     }
     
     // LAYER 1B: Elephant ear plants sprinkled in
-    const elephantEarCount = Math.floor(this.size * this.size * 0.08); // Increase to ~8% coverage
+    const elephantEarCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 1.2);
     for (let i = 0; i < elephantEarCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -291,7 +294,7 @@ export class ImprovedChunk {
     }
     
     // LAYER 2: Fan Palm Clusters - varied elevation, especially slopes
-    const fanPalmCount = Math.floor(this.size * this.size * 0.05); // Increase to ~5% coverage
+    const fanPalmCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.8);
     for (let i = 0; i < fanPalmCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -310,7 +313,8 @@ export class ImprovedChunk {
     
     // LAYER 2B: Coconut Palms - prefer lower elevations/water edges
     const coconutPoints = MathUtils.poissonDiskSampling(this.size, this.size, 12);
-    for (let i = 0; i < Math.min(coconutPoints.length * 0.5, 30); i++) {
+    const maxCoconuts = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.5);
+    for (let i = 0; i < Math.min(coconutPoints.length * 0.5, maxCoconuts); i++) {
       const point = coconutPoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
       
@@ -330,7 +334,8 @@ export class ImprovedChunk {
     
     // LAYER 3: Areca Palm Clusters - everywhere as mid-size
     const arecaPoints = MathUtils.poissonDiskSampling(this.size, this.size, 8);
-    for (let i = 0; i < Math.min(arecaPoints.length * 0.8, 50); i++) {
+    const maxAreca = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.6);
+    for (let i = 0; i < Math.min(arecaPoints.length * 0.8, maxAreca); i++) {
       const point = arecaPoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
       
@@ -347,7 +352,8 @@ export class ImprovedChunk {
     
     // LAYER 4: Giant Canopy Trees - Common but spaced out
     const giantTreePoints = MathUtils.poissonDiskSampling(this.size, this.size, 20);
-    for (let i = 0; i < Math.min(giantTreePoints.length, 12); i++) {
+    const maxGiantTrees = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.15);
+    for (let i = 0; i < Math.min(giantTreePoints.length, maxGiantTrees); i++) {
       const point = giantTreePoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
       

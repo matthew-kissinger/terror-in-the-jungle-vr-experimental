@@ -15,7 +15,7 @@ export class MinimapSystem implements GameSystem {
 
   // Minimap settings
   private readonly MINIMAP_SIZE = 200; // Increased size for better visibility
-  private readonly WORLD_SIZE = 300; // World units to display
+  private WORLD_SIZE = 300; // World units to display
   private readonly UPDATE_INTERVAL = 100; // ms between updates
   private lastUpdateTime = 0;
 
@@ -133,10 +133,10 @@ export class MinimapSystem implements GameSystem {
     // Update player position and rotation
     this.playerPosition.copy(this.camera.position);
 
-    // Get camera direction for rotation - properly fixed
+    // Get camera direction for rotation
     const cameraDir = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDir);
-    // Fixed: use positive values for correct orientation
+    // Standard atan2 for proper direction mapping: +X = East, +Z = South, -Z = North
     this.playerRotation = Math.atan2(cameraDir.x, cameraDir.z);
 
     // Throttle updates
@@ -155,6 +155,9 @@ export class MinimapSystem implements GameSystem {
     // Clear canvas with dark background
     ctx.fillStyle = 'rgba(20, 20, 30, 0.9)';
     ctx.fillRect(0, 0, size, size);
+
+    // Draw compass rose background
+    this.drawCompass(ctx);
 
     // Draw grid
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -179,12 +182,8 @@ export class MinimapSystem implements GameSystem {
       });
     }
 
-    // Draw combatants
-    if (this.combatantSystem) {
-      const stats = this.combatantSystem.getCombatStats();
-      // Draw a simple indicator of combat presence
-      this.drawCombatantIndicators(ctx);
-    }
+    // Draw combatants on minimap
+    this.drawCombatantIndicators(ctx);
 
     // Draw player (always in center)
     this.drawPlayer(ctx);
@@ -198,12 +197,11 @@ export class MinimapSystem implements GameSystem {
     const relativePos = new THREE.Vector3()
       .subVectors(zone.position, this.playerPosition);
 
-    // Rotate relative to player view - fix inverted X
+    // Rotate relative to player view - correct rotation matrix for minimap
     const cos = Math.cos(this.playerRotation);
     const sin = Math.sin(this.playerRotation);
-    // Invert X rotation to fix left/right
-    const rotatedX = -(relativePos.x * cos - relativePos.z * sin);
-    const rotatedZ = relativePos.x * sin + relativePos.z * cos;
+    const rotatedX = relativePos.x * cos + relativePos.z * sin;
+    const rotatedZ = -relativePos.x * sin + relativePos.z * cos;
 
     // Scale to minimap
     const scale = this.MINIMAP_SIZE / this.WORLD_SIZE;
@@ -274,17 +272,38 @@ export class MinimapSystem implements GameSystem {
   }
 
   private drawCombatantIndicators(ctx: CanvasRenderingContext2D): void {
-    // Draw combat intensity indicators in quadrants
-    const quadrantSize = this.MINIMAP_SIZE / 4;
+    if (!this.combatantSystem) return;
 
-    // This is simplified - in a real implementation you'd track actual combatant positions
-    // For now, just show general combat areas
+    // Get all combatants and draw their positions
+    const combatants = this.combatantSystem.getAllCombatants();
+    const scale = this.MINIMAP_SIZE / this.WORLD_SIZE;
 
-    // Top-right quadrant (example combat zone)
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-    ctx.beginPath();
-    ctx.arc(this.MINIMAP_SIZE * 0.75, this.MINIMAP_SIZE * 0.25, quadrantSize, 0, Math.PI * 2);
-    ctx.fill();
+    combatants.forEach(combatant => {
+      if (combatant.state === 'dead') return;
+
+      // Convert world position to minimap position relative to player
+      const relativePos = new THREE.Vector3()
+        .subVectors(combatant.position, this.playerPosition);
+
+      // Rotate relative to player view - correct rotation matrix for minimap
+      const cos = Math.cos(this.playerRotation);
+      const sin = Math.sin(this.playerRotation);
+      const rotatedX = relativePos.x * cos + relativePos.z * sin;
+      const rotatedZ = -relativePos.x * sin + relativePos.z * cos;
+
+      // Scale to minimap
+      const x = this.MINIMAP_SIZE / 2 + rotatedX * scale;
+      const y = this.MINIMAP_SIZE / 2 - rotatedZ * scale;
+
+      // Skip if outside minimap bounds
+      if (x < 0 || x > this.MINIMAP_SIZE || y < 0 || y > this.MINIMAP_SIZE) return;
+
+      // Draw combatant dot
+      ctx.fillStyle = combatant.faction === Faction.US ? 'rgba(68, 136, 255, 0.6)' : 'rgba(255, 68, 68, 0.6)';
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   private drawPlayer(ctx: CanvasRenderingContext2D): void {
@@ -344,6 +363,87 @@ export class MinimapSystem implements GameSystem {
 
   setCombatantSystem(system: CombatantSystem): void {
     this.combatantSystem = system;
+  }
+
+  // Game mode configuration
+  setWorldScale(scale: number): void {
+    this.WORLD_SIZE = scale;
+    console.log(`🎮 Minimap world scale set to ${scale}`);
+  }
+
+  private drawCompass(ctx: CanvasRenderingContext2D): void {
+    const centerX = this.MINIMAP_SIZE / 2;
+    const centerY = this.MINIMAP_SIZE / 2;
+    const compassRadius = 90;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+
+    // Rotate compass based on player rotation
+    ctx.rotate(this.playerRotation);
+
+    // Draw compass markings
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+
+    // Cardinal directions
+    const directions = [
+      { angle: 0, label: 'N', main: true },
+      { angle: Math.PI / 2, label: 'E', main: true },
+      { angle: Math.PI, label: 'S', main: true },
+      { angle: -Math.PI / 2, label: 'W', main: true },
+      { angle: Math.PI / 4, label: 'NE', main: false },
+      { angle: 3 * Math.PI / 4, label: 'SE', main: false },
+      { angle: -3 * Math.PI / 4, label: 'SW', main: false },
+      { angle: -Math.PI / 4, label: 'NW', main: false }
+    ];
+
+    directions.forEach(dir => {
+      ctx.save();
+      ctx.rotate(dir.angle);
+
+      // Draw tick mark
+      ctx.beginPath();
+      ctx.moveTo(0, -compassRadius + 10);
+      ctx.lineTo(0, -compassRadius + (dir.main ? 20 : 15));
+      ctx.stroke();
+
+      // Draw label for cardinal directions
+      if (dir.main) {
+        ctx.fillStyle = dir.label === 'N' ? 'rgba(255, 100, 100, 0.8)' : 'rgba(255, 255, 255, 0.6)';
+        ctx.font = dir.label === 'N' ? 'bold 14px Courier New' : '12px Courier New';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(dir.label, 0, -compassRadius + 30);
+      }
+
+      ctx.restore();
+    });
+
+    // Draw degree markings
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    for (let i = 0; i < 360; i += 10) {
+      if (i % 90 !== 0 && i % 45 !== 0) {
+        const angle = (i * Math.PI) / 180;
+        ctx.save();
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, -compassRadius + 12);
+        ctx.lineTo(0, -compassRadius + 14);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+
+    // Draw bearing text - convert from radians to degrees
+    // In Three.js: -Z is North (0°), +X is East (90°), +Z is South (180°), -X is West (270°)
+    const bearing = Math.round(((-this.playerRotation * 180 / Math.PI) + 90 + 360) % 360);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = 'bold 11px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${bearing}°`, centerX, 15);
   }
 
   dispose(): void {

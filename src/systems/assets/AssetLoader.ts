@@ -105,17 +105,60 @@ export class AssetLoader implements GameSystem {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         // Note: flipY will be handled by PixelPerfectUtils.configureTexture()
-        
-        asset.texture = texture;
-        this.loadedTextures.set(asset.name, texture);
-        
-        console.log(`Loaded texture: ${asset.name} (${texture.image.width}x${texture.image.height})`);
+        // Downscale extremely large textures to avoid GPU memory exhaustion
+        const resized = this.downscaleIfNeeded(asset.name, texture);
+        const finalTexture = resized || texture;
+
+        asset.texture = finalTexture;
+        this.loadedTextures.set(asset.name, finalTexture);
+
+        console.log(`Loaded texture: ${asset.name} (${finalTexture.image.width}x${finalTexture.image.height})`);
       } catch (error) {
         console.warn(`Failed to load texture: ${asset.path}`, error);
       }
     });
 
     await Promise.all(loadPromises);
+  }
+
+  // Heuristically clamp texture size by asset type to keep WebGL stable
+  private downscaleIfNeeded(name: string, texture: THREE.Texture): THREE.Texture | null {
+    const w = (texture.image as any)?.width || 0;
+    const h = (texture.image as any)?.height || 0;
+    if (!w || !h) return null;
+
+    const lower = name.toLowerCase();
+    let maxDim = 2048;
+    if (lower.includes('skybox')) maxDim = 1024;
+    if (lower.includes('forestfloor') || lower.includes('waternormals')) maxDim = 1024;
+    if (lower.includes('fern') || lower.includes('areca') || lower.includes('elephant') || lower.includes('fanpalm')) maxDim = 2048;
+
+    if (w <= maxDim && h <= maxDim) return null;
+
+    const scale = Math.min(maxDim / w, maxDim / h);
+    const newW = Math.max(1, Math.floor(w * scale));
+    const newH = Math.max(1, Math.floor(h * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = newW;
+    canvas.height = newH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    try {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'medium';
+      ctx.drawImage(texture.image as any, 0, 0, newW, newH);
+      const canvasTex = new THREE.CanvasTexture(canvas);
+      canvasTex.magFilter = THREE.NearestFilter;
+      canvasTex.minFilter = THREE.NearestFilter;
+      canvasTex.wrapS = THREE.RepeatWrapping;
+      canvasTex.wrapT = THREE.RepeatWrapping;
+      texture.dispose();
+      return canvasTex;
+    } catch (e) {
+      console.warn(`Texture downscale failed for ${name}:`, e);
+      return null;
+    }
   }
 
   private loadTexture(path: string): Promise<THREE.Texture> {

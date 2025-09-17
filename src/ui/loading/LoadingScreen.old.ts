@@ -3,6 +3,7 @@ import { LOADING_PHASES } from '../../config/loading';
 import { LoadingStyles } from './LoadingStyles';
 import { LoadingPanels } from './LoadingPanels';
 import { LoadingProgress } from './LoadingProgress';
+import { GameModeSelection } from './GameModeSelection';
 import { GameMode } from '../../config/gameModes';
 
 export class LoadingScreen {
@@ -16,15 +17,10 @@ export class LoadingScreen {
   private settingsButton: HTMLButtonElement;
   private howToPlayButton: HTMLButtonElement;
 
-  // Game mode selection elements
-  private modeSelectionContainer: HTMLDivElement;
-  private zoneControlCard: HTMLDivElement;
-  private openFrontierCard: HTMLDivElement;
-  private selectedModeDisplay: HTMLDivElement;
-
   // Refactored modules
   private panels: LoadingPanels;
   private progress: LoadingProgress;
+  private gameModeSelection: GameModeSelection;
 
   private isVisible: boolean = true;
   private selectedGameMode: GameMode = GameMode.ZONE_CONTROL;
@@ -43,12 +39,6 @@ export class LoadingScreen {
     this.settingsButton = this.container.querySelector('.settings-button') as HTMLButtonElement;
     this.howToPlayButton = this.container.querySelector('.how-to-play-button') as HTMLButtonElement;
 
-    // Game mode elements
-    this.modeSelectionContainer = this.container.querySelector('.mode-selection-container') as HTMLDivElement;
-    this.zoneControlCard = this.container.querySelector('.zone-control-card') as HTMLDivElement;
-    this.openFrontierCard = this.container.querySelector('.open-frontier-card') as HTMLDivElement;
-    this.selectedModeDisplay = this.container.querySelector('.selected-mode-display') as HTMLDivElement;
-
     // Initialize modules
     this.panels = new LoadingPanels();
     this.progress = new LoadingProgress(
@@ -57,6 +47,13 @@ export class LoadingScreen {
       this.phaseText,
       this.tipText
     );
+    this.gameModeSelection = new GameModeSelection();
+    this.gameModeSelection.onModeSelect((mode) => {
+      this.selectedGameMode = mode;
+      if (this.onPlayCallback) {
+        this.onPlayCallback(mode);
+      }
+    });
 
     this.initializePhases();
     this.setupEventListeners();
@@ -67,97 +64,7 @@ export class LoadingScreen {
     const container = document.createElement('div');
     container.id = 'loading-screen';
     container.innerHTML = `
-      <style>
-        ${LoadingStyles.getStyles()}
-
-        /* Game Mode Selection Styles */
-        .mode-selection-container {
-          display: none;
-          margin-top: 30px;
-          margin-bottom: 20px;
-        }
-
-        .mode-selection-container.visible {
-          display: block;
-        }
-
-        .mode-cards {
-          display: flex;
-          gap: 20px;
-          justify-content: center;
-          margin-bottom: 20px;
-        }
-
-        .mode-card {
-          background: rgba(0, 0, 0, 0.5);
-          border: 2px solid rgba(74, 124, 78, 0.3);
-          border-radius: 10px;
-          padding: 20px;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          width: 250px;
-        }
-
-        .mode-card:hover {
-          border-color: rgba(74, 124, 78, 0.6);
-          background: rgba(74, 124, 78, 0.1);
-          transform: translateY(-5px);
-        }
-
-        .mode-card.selected {
-          border-color: #4a7c4e;
-          background: rgba(74, 124, 78, 0.2);
-          box-shadow: 0 0 20px rgba(74, 124, 78, 0.4);
-        }
-
-        .mode-card-title {
-          color: #8fbc8f;
-          font-size: 20px;
-          font-weight: bold;
-          margin-bottom: 10px;
-          text-transform: uppercase;
-        }
-
-        .mode-card-subtitle {
-          color: #708070;
-          font-size: 12px;
-          margin-bottom: 15px;
-          text-transform: uppercase;
-        }
-
-        .mode-card-description {
-          color: #c4b5a0;
-          font-size: 14px;
-          line-height: 1.5;
-          margin-bottom: 15px;
-        }
-
-        .mode-card-features {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .mode-feature {
-          background: rgba(74, 124, 78, 0.2);
-          border: 1px solid rgba(74, 124, 78, 0.4);
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          color: #8fbc8f;
-        }
-
-        .selected-mode-display {
-          text-align: center;
-          color: #708070;
-          font-size: 14px;
-          margin-top: 10px;
-        }
-
-        .selected-mode-display strong {
-          color: #8fbc8f;
-        }
-      </style>
+      <style>${LoadingStyles.getStyles()}</style>
 
       <div class="loading-content">
         <h1 class="game-title">TERROR IN THE JUNGLE</h1>
@@ -175,45 +82,8 @@ export class LoadingScreen {
           <div class="tip-text"></div>
         </div>
 
-        <!-- Game Mode Selection -->
-        <div class="mode-selection-container">
-          <div class="mode-cards">
-            <div class="mode-card zone-control-card selected" data-mode="zone_control">
-              <div class="mode-card-title">Zone Control</div>
-              <div class="mode-card-subtitle">Classic</div>
-              <div class="mode-card-description">
-                Fast-paced combat over 3 strategic zones. Quick 3-minute matches.
-              </div>
-              <div class="mode-card-features">
-                <div class="mode-feature">3 Zones</div>
-                <div class="mode-feature">60 Units</div>
-                <div class="mode-feature">3 Min</div>
-                <div class="mode-feature">300 Tickets</div>
-              </div>
-            </div>
-
-            <div class="mode-card open-frontier-card" data-mode="open_frontier">
-              <div class="mode-card-title">Open Frontier</div>
-              <div class="mode-card-subtitle">Large Scale</div>
-              <div class="mode-card-description">
-                Massive 2x2 mile battlefield with 10 zones. Epic 15-minute campaigns.
-              </div>
-              <div class="mode-card-features">
-                <div class="mode-feature">10 Zones</div>
-                <div class="mode-feature">120+ Units</div>
-                <div class="mode-feature">15 Min</div>
-                <div class="mode-feature">1000 Tickets</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="selected-mode-display">
-            Selected Mode: <strong>ZONE CONTROL</strong>
-          </div>
-        </div>
-
         <div class="menu-buttons">
-          <button class="menu-button play-button">PLAY ZONE CONTROL</button>
+          <button class="menu-button play-button">PLAY</button>
           <button class="menu-button secondary-button settings-button">SETTINGS</button>
           <button class="menu-button secondary-button how-to-play-button">HOW TO PLAY</button>
         </div>
@@ -235,20 +105,9 @@ export class LoadingScreen {
   }
 
   private setupEventListeners(): void {
-    // Game mode selection
-    this.zoneControlCard.addEventListener('click', () => {
-      this.selectGameMode(GameMode.ZONE_CONTROL);
-    });
-
-    this.openFrontierCard.addEventListener('click', () => {
-      this.selectGameMode(GameMode.OPEN_FRONTIER);
-    });
-
-    // Play button
     this.playButton.addEventListener('click', () => {
-      if (this.onPlayCallback) {
-        this.onPlayCallback(this.selectedGameMode);
-      }
+      // Show game mode selection instead of directly starting
+      this.gameModeSelection.show();
     });
 
     this.settingsButton.addEventListener('click', () => {
@@ -258,19 +117,6 @@ export class LoadingScreen {
     this.howToPlayButton.addEventListener('click', () => {
       this.panels.showHowToPlayPanel();
     });
-  }
-
-  private selectGameMode(mode: GameMode): void {
-    this.selectedGameMode = mode;
-
-    // Update selected state
-    this.zoneControlCard.classList.toggle('selected', mode === GameMode.ZONE_CONTROL);
-    this.openFrontierCard.classList.toggle('selected', mode === GameMode.OPEN_FRONTIER);
-
-    // Update display text
-    const modeName = mode === GameMode.ZONE_CONTROL ? 'ZONE CONTROL' : 'OPEN FRONTIER';
-    this.selectedModeDisplay.innerHTML = `Selected Mode: <strong>${modeName}</strong>`;
-    this.playButton.textContent = `PLAY ${modeName}`;
   }
 
   public updateProgress(phaseId: string, progress: number): void {
@@ -287,10 +133,6 @@ export class LoadingScreen {
     if (buttons) {
       buttons.classList.add('visible');
     }
-
-    // Show mode selection
-    this.modeSelectionContainer.classList.add('visible');
-
     this.progress.showComplete();
   }
 
@@ -324,6 +166,7 @@ export class LoadingScreen {
       this.container.parentElement.removeChild(this.container);
     }
     this.panels.dispose();
+    this.gameModeSelection.dispose();
   }
 
   // Helper method for LoadingManager integration
