@@ -40,6 +40,7 @@ export class PlayerHealthSystem implements GameSystem {
   // Camera reference for damage indicators
   private camera?: THREE.Camera;
   private ticketSystem?: TicketSystem;
+  private hudSystem?: any;
 
   constructor() {
     this.ui = new PlayerHealthUI();
@@ -61,20 +62,9 @@ export class PlayerHealthSystem implements GameSystem {
       this.playerState.invulnerabilityTime = 0;
 
       this.effects.clearDamageIndicators();
-      this.ui.hideDeathScreen();
       this.updateHealthDisplay();
       this.effects.stopHeartbeat();
     });
-
-    this.respawnManager.setDeathCallback(() => {
-      this.ui.showDeathScreen();
-    });
-
-    // Setup UI button callbacks
-    const spawnBaseBtn = this.ui.getSpawnBaseButton();
-    if (spawnBaseBtn) {
-      spawnBaseBtn.addEventListener('click', () => this.respawnManager.respawnAtBase());
-    }
     }
   }
 
@@ -136,16 +126,6 @@ export class PlayerHealthSystem implements GameSystem {
 
   private updateDeathState(deltaTime: number): void {
     this.playerState.deathTime -= deltaTime;
-    this.ui.updateDeathTimer(this.playerState.deathTime);
-
-    if (this.playerState.deathTime <= 0) {
-      const spawnables = this.respawnManager.getSpawnableZones();
-      this.ui.updateSpawnZonesList(
-        spawnables,
-        (zoneId: string) => this.respawnManager.respawnAtSpecificZone(zoneId)
-      );
-      this.ui.enableSpawnButtons();
-    }
   }
 
   // Public API
@@ -192,6 +172,11 @@ export class PlayerHealthSystem implements GameSystem {
     this.playerState.isAlive = false;
     this.playerState.isDead = true;
     this.playerState.deathTime = this.playerState.respawnTime;
+
+    // Track player death in HUD
+    if (this.hudSystem) {
+      this.hudSystem.addDeath();
+    }
 
     this.respawnManager.onPlayerDeath();
     this.effects.stopHeartbeat();
@@ -251,6 +236,10 @@ export class PlayerHealthSystem implements GameSystem {
 
   setCamera(camera: THREE.Camera): void {
     this.camera = camera;
+  }
+
+  setHUDSystem(hudSystem: any): void {
+    this.hudSystem = hudSystem;
   }
 
   dispose(): void {

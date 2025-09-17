@@ -122,7 +122,8 @@ export class PlayerController implements GameSystem {
   private boundRequestPointerLock?: () => void;
 
   private requestPointerLock(): void {
-    if (this.gameStarted && !this.isPointerLocked) {
+    // Don't lock if controls are disabled (dead/respawning)
+    if (this.gameStarted && !this.isPointerLocked && this.isControlsEnabled) {
       document.body.requestPointerLock();
     }
   }
@@ -281,11 +282,24 @@ export class PlayerController implements GameSystem {
     this.keys.clear();
     this.playerState.velocity.set(0, 0, 0);
     this.playerState.isRunning = false;
+
+    // Unlock mouse cursor for respawn UI
+    if (document.pointerLockElement === document.body) {
+      document.exitPointerLock();
+    }
   }
 
   // Enable controls (for respawn)
   enableControls(): void {
     this.isControlsEnabled = true;
+
+    // Re-lock mouse cursor after respawn
+    if (this.gameStarted && !document.pointerLockElement) {
+      // Small delay to avoid conflict with UI interaction
+      setTimeout(() => {
+        document.body.requestPointerLock();
+      }, 100);
+    }
   }
 
   private showControls(): void {

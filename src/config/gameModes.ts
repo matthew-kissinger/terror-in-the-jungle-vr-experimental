@@ -70,7 +70,7 @@ export const ZONE_CONTROL_CONFIG: GameModeConfig = {
   matchDuration: 180, // 3 minutes
   deathPenalty: 2,
 
-  playerCanSpawnAtZones: false,
+  playerCanSpawnAtZones: true,
   respawnTime: 5,
   spawnProtectionDuration: 2,
 

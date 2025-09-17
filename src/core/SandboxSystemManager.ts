@@ -146,6 +146,7 @@ export class SandboxSystemManager {
     this.playerHealthSystem.setFirstPersonWeapon(this.firstPersonWeapon);
     this.playerHealthSystem.setCamera(camera);
     this.playerHealthSystem.setRespawnManager(this.playerRespawnManager);
+    this.playerHealthSystem.setHUDSystem(this.hudSystem);
     this.minimapSystem.setZoneManager(this.zoneManager);
     this.minimapSystem.setCombatantSystem(this.combatantSystem);
     this.fullMapSystem.setZoneManager(this.zoneManager);

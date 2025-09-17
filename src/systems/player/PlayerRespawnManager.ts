@@ -4,6 +4,7 @@ import { Faction } from '../combat/types';
 import { ZoneManager, ZoneState } from '../world/ZoneManager';
 import { PlayerHealthSystem } from './PlayerHealthSystem';
 import { GameModeManager } from '../world/GameModeManager';
+import { RespawnMapView } from '../../ui/map/RespawnMapView';
 
 export class PlayerRespawnManager implements GameSystem {
   private scene: THREE.Scene;
@@ -20,6 +21,7 @@ export class PlayerRespawnManager implements GameSystem {
   private selectedSpawnPoint?: string;
   private respawnUIContainer?: HTMLDivElement;
   private availableSpawnPoints: Array<{ id: string; name: string; position: THREE.Vector3; safe: boolean }> = [];
+  private respawnMapView: RespawnMapView;
 
   private onRespawnCallback?: (position: THREE.Vector3) => void;
   private onDeathCallback?: () => void;
@@ -27,6 +29,7 @@ export class PlayerRespawnManager implements GameSystem {
   constructor(scene: THREE.Scene, camera: THREE.Camera) {
     this.scene = scene;
     this.camera = camera;
+    this.respawnMapView = new RespawnMapView();
   }
 
   async init(): Promise<void> {
@@ -44,99 +47,305 @@ export class PlayerRespawnManager implements GameSystem {
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.95);
       display: none;
-      justify-content: center;
-      align-items: center;
       z-index: 10000;
       font-family: 'Courier New', monospace;
     `;
 
-    // Create inner content container
-    const content = document.createElement('div');
-    content.style.cssText = `
-      background: rgba(20, 20, 20, 0.95);
-      border: 2px solid #00ff00;
-      border-radius: 8px;
-      padding: 30px;
-      max-width: 800px;
-      width: 90%;
-      color: white;
+    // Create main layout container
+    const mainLayout = document.createElement('div');
+    mainLayout.style.cssText = `
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     `;
 
-    // Title
-    const title = document.createElement('h2');
-    title.style.cssText = `
-      color: #00ff00;
-      margin: 0 0 20px 0;
+    // KIA Header
+    const header = document.createElement('div');
+    header.style.cssText = `
+      background: linear-gradient(180deg, rgba(20,0,0,0.95) 0%, rgba(10,0,0,0.8) 100%);
+      border-bottom: 2px solid #ff0000;
+      padding: 20px;
       text-align: center;
-      font-size: 28px;
+    `;
+
+    const kiaText = document.createElement('h1');
+    kiaText.style.cssText = `
+      color: #ff0000;
+      font-size: 48px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin: 0;
+      letter-spacing: 8px;
+      text-shadow: 0 0 20px rgba(255,0,0,0.5);
+    `;
+    kiaText.textContent = 'K.I.A.';
+    header.appendChild(kiaText);
+
+    const statusText = document.createElement('div');
+    statusText.style.cssText = `
+      color: #999;
+      font-size: 16px;
+      margin-top: 10px;
       text-transform: uppercase;
       letter-spacing: 2px;
     `;
-    title.textContent = 'Select Spawn Point';
-    content.appendChild(title);
+    statusText.textContent = 'KILLED IN ACTION';
+    header.appendChild(statusText);
 
-    // Instructions
-    const instructions = document.createElement('p');
-    instructions.style.cssText = `
-      color: #888;
-      text-align: center;
-      margin-bottom: 25px;
+    // Content area with map and controls
+    const contentArea = document.createElement('div');
+    contentArea.style.cssText = `
+      flex: 1;
+      display: flex;
+      padding: 30px;
+      gap: 30px;
+      overflow: hidden;
+    `;
+
+    // Left panel - Map
+    const mapPanel = document.createElement('div');
+    mapPanel.style.cssText = `
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 600px;
+    `;
+
+    const mapTitle = document.createElement('h2');
+    mapTitle.style.cssText = `
+      color: #00ff00;
+      font-size: 20px;
+      text-transform: uppercase;
+      margin: 0 0 15px 0;
+      letter-spacing: 2px;
+    `;
+    mapTitle.textContent = 'TACTICAL MAP - SELECT DEPLOYMENT';
+    mapPanel.appendChild(mapTitle);
+
+    // Map container with canvas
+    const mapContainer = document.createElement('div');
+    mapContainer.id = 'respawn-map';
+    mapContainer.style.cssText = `
+      flex: 1;
+      background: #0a0a0a;
+      border: 2px solid #00ff00;
+      border-radius: 4px;
+      position: relative;
+      min-height: 500px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Add the map canvas
+    const mapCanvas = this.respawnMapView.getCanvas();
+    mapCanvas.style.cssText = `
+      width: 100%;
+      height: 100%;
+      max-width: 600px;
+      max-height: 600px;
+    `;
+    mapContainer.appendChild(mapCanvas);
+    mapPanel.appendChild(mapContainer);
+
+    // Set up map selection callback
+    this.respawnMapView.setZoneSelectedCallback((zoneId: string, zoneName: string) => {
+      this.selectSpawnPointOnMap(zoneId, zoneName);
+    });
+
+    // Right panel - Info and controls
+    const infoPanel = document.createElement('div');
+    infoPanel.style.cssText = `
+      width: 350px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    `;
+
+    // Selected spawn info
+    const selectedInfo = document.createElement('div');
+    selectedInfo.style.cssText = `
+      background: rgba(0, 50, 0, 0.3);
+      border: 1px solid #00ff00;
+      border-radius: 4px;
+      padding: 20px;
+    `;
+
+    const selectedTitle = document.createElement('h3');
+    selectedTitle.style.cssText = `
+      color: #00ff00;
+      font-size: 16px;
+      text-transform: uppercase;
+      margin: 0 0 15px 0;
+      letter-spacing: 1px;
+    `;
+    selectedTitle.textContent = 'SELECTED SPAWN POINT';
+    selectedInfo.appendChild(selectedTitle);
+
+    const selectedName = document.createElement('div');
+    selectedName.id = 'selected-spawn-name';
+    selectedName.style.cssText = `
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    `;
+    selectedName.textContent = 'NONE';
+    selectedInfo.appendChild(selectedName);
+
+    const selectedStatus = document.createElement('div');
+    selectedStatus.id = 'selected-spawn-status';
+    selectedStatus.style.cssText = `
+      color: #999;
       font-size: 14px;
     `;
-    instructions.textContent = 'Click on a spawn point or use number keys (1-9) to respawn';
-    content.appendChild(instructions);
+    selectedStatus.textContent = 'Select a spawn point on the map';
+    selectedInfo.appendChild(selectedStatus);
 
-    // Spawn points list container
-    const spawnList = document.createElement('div');
-    spawnList.id = 'spawn-list';
-    spawnList.style.cssText = `
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 15px;
-      max-height: 400px;
-      overflow-y: auto;
-      padding: 10px;
+    infoPanel.appendChild(selectedInfo);
+
+    // Timer and respawn button
+    const controlsContainer = document.createElement('div');
+    controlsContainer.style.cssText = `
+      background: rgba(20, 20, 20, 0.8);
+      border: 1px solid #666;
+      border-radius: 4px;
+      padding: 20px;
+      text-align: center;
     `;
-    content.appendChild(spawnList);
 
-    // Timer display
     const timerDisplay = document.createElement('div');
     timerDisplay.id = 'respawn-timer';
     timerDisplay.style.cssText = `
-      text-align: center;
-      margin-top: 20px;
       color: #ff6600;
       font-size: 16px;
-      font-weight: bold;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     `;
-    content.appendChild(timerDisplay);
+    controlsContainer.appendChild(timerDisplay);
 
-    this.respawnUIContainer.appendChild(content);
-    document.body.appendChild(this.respawnUIContainer);
+    const respawnButton = document.createElement('button');
+    respawnButton.id = 'respawn-button';
+    respawnButton.style.cssText = `
+      background: linear-gradient(180deg, #00ff00 0%, #00cc00 100%);
+      border: 2px solid #00ff00;
+      color: #000;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 15px 40px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+      width: 100%;
+      box-shadow: 0 4px 10px rgba(0,255,0,0.3);
+    `;
+    respawnButton.textContent = 'DEPLOY';
+    respawnButton.disabled = true;
+    controlsContainer.appendChild(respawnButton);
 
-    // Add keyboard listener for number keys
-    document.addEventListener('keydown', (e) => this.handleRespawnKeyPress(e));
-  }
-
-  private handleRespawnKeyPress(event: KeyboardEvent): void {
-    if (!this.isRespawnUIVisible) return;
-
-    const key = parseInt(event.key);
-    if (key >= 1 && key <= 9) {
-      const index = key - 1;
-      if (index < this.availableSpawnPoints.length) {
-        this.selectSpawnPoint(this.availableSpawnPoints[index].id);
+    // Add hover effect for button
+    respawnButton.onmouseover = () => {
+      if (!respawnButton.disabled) {
+        respawnButton.style.transform = 'scale(1.05)';
+        respawnButton.style.boxShadow = '0 6px 20px rgba(0,255,0,0.5)';
       }
-    }
+    };
+    respawnButton.onmouseout = () => {
+      respawnButton.style.transform = 'scale(1)';
+      respawnButton.style.boxShadow = '0 4px 10px rgba(0,255,0,0.3)';
+    };
+
+    respawnButton.onclick = () => {
+      if (this.selectedSpawnPoint && !respawnButton.disabled) {
+        this.confirmRespawn();
+      }
+    };
+
+    infoPanel.appendChild(controlsContainer);
+
+    // Legend
+    const legend = document.createElement('div');
+    legend.style.cssText = `
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 15px;
+    `;
+
+    const legendTitle = document.createElement('h4');
+    legendTitle.style.cssText = `
+      color: #888;
+      font-size: 14px;
+      text-transform: uppercase;
+      margin: 0 0 10px 0;
+      letter-spacing: 1px;
+    `;
+    legendTitle.textContent = 'MAP LEGEND';
+    legend.appendChild(legendTitle);
+
+    const legendItems = [
+      { color: '#0080ff', label: 'HQ / Main Base' },
+      { color: '#00ff00', label: 'Controlled Zone' },
+      { color: '#ffff00', label: 'Contested Zone' },
+      { color: '#ff0000', label: 'Enemy Zone' }
+    ];
+
+    legendItems.forEach(item => {
+      const legendItem = document.createElement('div');
+      legendItem.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 5px;
+      `;
+
+      const colorBox = document.createElement('div');
+      colorBox.style.cssText = `
+        width: 16px;
+        height: 16px;
+        background: ${item.color};
+        border: 1px solid rgba(255,255,255,0.3);
+      `;
+
+      const label = document.createElement('span');
+      label.style.cssText = `
+        color: #999;
+        font-size: 12px;
+      `;
+      label.textContent = item.label;
+
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(label);
+      legend.appendChild(legendItem);
+    });
+
+    infoPanel.appendChild(legend);
+
+    // Assemble the layout
+    contentArea.appendChild(mapPanel);
+    contentArea.appendChild(infoPanel);
+
+    mainLayout.appendChild(header);
+    mainLayout.appendChild(contentArea);
+
+    this.respawnUIContainer.appendChild(mainLayout);
+    document.body.appendChild(this.respawnUIContainer);
   }
+
 
   update(deltaTime: number): void {
-    if (this.respawnTimer > 0) {
+    if (this.isRespawnUIVisible && this.respawnTimer > 0) {
       this.respawnTimer -= deltaTime;
+      this.updateTimerDisplay();
       if (this.respawnTimer <= 0) {
-        this.showRespawnUI();
+        this.enableSpawnButtons();
       }
     }
   }
@@ -146,11 +355,11 @@ export class PlayerRespawnManager implements GameSystem {
     if (this.respawnUIContainer?.parentElement) {
       this.respawnUIContainer.parentElement.removeChild(this.respawnUIContainer);
     }
-    document.removeEventListener('keydown', (e) => this.handleRespawnKeyPress(e));
   }
 
   setZoneManager(manager: ZoneManager): void {
     this.zoneManager = manager;
+    this.respawnMapView.setZoneManager(manager);
   }
 
   setPlayerHealthSystem(system: PlayerHealthSystem): void {
@@ -159,6 +368,7 @@ export class PlayerRespawnManager implements GameSystem {
 
   setGameModeManager(manager: GameModeManager): void {
     this.gameModeManager = manager;
+    this.respawnMapView.setGameModeManager(manager);
   }
 
   setPlayerController(controller: any): void {
@@ -185,10 +395,14 @@ export class PlayerRespawnManager implements GameSystem {
     // Check if game mode allows spawning at zones
     const canSpawnAtZones = this.gameModeManager?.canPlayerSpawnAtZones() ?? false;
 
-    // Always include HQs
-    const zones = this.zoneManager.getAllZones().filter(z =>
-      z.owner === Faction.US && (z.isHomeBase || (canSpawnAtZones && !z.isHomeBase))
-    );
+    // Filter zones - only US controlled zones (not OPFOR or contested)
+    const zones = this.zoneManager.getAllZones().filter(z => {
+      // Only allow US bases (not OPFOR bases)
+      if (z.isHomeBase && z.owner === Faction.US) return true;
+      // Only allow fully US-captured zones (not contested or OPFOR controlled)
+      if (canSpawnAtZones && !z.isHomeBase && z.state === ZoneState.US_CONTROLLED) return true;
+      return false;
+    });
 
     console.log(`🚩 Found ${zones.length} spawnable zones:`, zones.map(z => `${z.name} (${z.state})`));
 
@@ -208,6 +422,7 @@ export class PlayerRespawnManager implements GameSystem {
     }
 
     const zones = this.zoneManager.getAllZones();
+    // Only non-base zones that are fully US controlled (not contested or OPFOR)
     return zones.some(zone => zone.state === ZoneState.US_CONTROLLED && !zone.isHomeBase);
   }
 
@@ -283,6 +498,9 @@ export class PlayerRespawnManager implements GameSystem {
     const respawnTime = this.gameModeManager?.getRespawnTime() ?? 5;
     this.respawnTimer = respawnTime;
 
+    // Show respawn UI immediately
+    this.showRespawnUI();
+
     // Trigger callback
     if (this.onDeathCallback) {
       this.onDeathCallback();
@@ -300,8 +518,21 @@ export class PlayerRespawnManager implements GameSystem {
     // Show the UI
     this.respawnUIContainer.style.display = 'flex';
 
-    // Update spawn point buttons
-    this.updateSpawnPointDisplay();
+    // Clear previous selection and update map
+    this.respawnMapView.clearSelection();
+    this.respawnMapView.updateSpawnableZones();
+    this.respawnMapView.render();
+    this.selectedSpawnPoint = undefined;
+
+    // Reset selected spawn info
+    const nameElement = document.getElementById('selected-spawn-name');
+    const statusElement = document.getElementById('selected-spawn-status');
+    if (nameElement) nameElement.textContent = 'NONE';
+    if (statusElement) statusElement.textContent = 'Select a spawn point on the map';
+
+    // Update buttons and timer
+    this.disableSpawnButtons();
+    this.updateTimerDisplay();
 
     // Start updating the UI periodically to show zone status changes
     const updateInterval = setInterval(() => {
@@ -309,7 +540,8 @@ export class PlayerRespawnManager implements GameSystem {
         clearInterval(updateInterval);
         return;
       }
-      this.updateSpawnPointDisplay();
+      this.respawnMapView.updateSpawnableZones();
+      this.respawnMapView.render();
     }, 1000);
   }
 
@@ -329,111 +561,51 @@ export class PlayerRespawnManager implements GameSystem {
 
     this.availableSpawnPoints = zones
       .filter(z => {
-        // Can spawn at US-owned bases
+        // Can only spawn at US-owned bases (not OPFOR bases)
         if (z.isHomeBase && z.owner === Faction.US) return true;
-        // Can spawn at captured zones if game mode allows
-        if (canSpawnAtZones && !z.isHomeBase && z.owner === Faction.US) return true;
+        // Can spawn at fully captured zones if game mode allows (must be US controlled, not contested or OPFOR)
+        if (canSpawnAtZones && !z.isHomeBase && z.state === ZoneState.US_CONTROLLED) return true;
         return false;
       })
       .map(z => ({
         id: z.id,
         name: z.name,
         position: z.position.clone(),
-        safe: z.state !== ZoneState.CONTESTED
+        safe: true
       }));
   }
 
   private updateSpawnPointDisplay(): void {
-    const spawnList = document.getElementById('spawn-list');
-    if (!spawnList) return;
-
-    // Clear existing buttons
-    spawnList.innerHTML = '';
-
-    // Create button for each spawn point
-    this.availableSpawnPoints.forEach((point, index) => {
-      const button = document.createElement('button');
-      button.style.cssText = `
-        background: ${point.safe ? 'rgba(0, 100, 0, 0.3)' : 'rgba(100, 50, 0, 0.3)'};
-        border: 2px solid ${point.safe ? '#00ff00' : '#ff6600'};
-        color: white;
-        padding: 15px;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.2s;
-        position: relative;
-        text-align: left;
-      `;
-
-      // Add hover effect
-      button.onmouseover = () => {
-        button.style.background = point.safe ? 'rgba(0, 150, 0, 0.5)' : 'rgba(150, 75, 0, 0.5)';
-        button.style.transform = 'scale(1.05)';
-      };
-      button.onmouseout = () => {
-        button.style.background = point.safe ? 'rgba(0, 100, 0, 0.3)' : 'rgba(100, 50, 0, 0.3)';
-        button.style.transform = 'scale(1)';
-      };
-
-      // Number indicator
-      const numberBadge = document.createElement('div');
-      numberBadge.style.cssText = `
-        position: absolute;
-        top: 5px;
-        right: 10px;
-        background: rgba(255, 255, 255, 0.2);
-        border: 1px solid #888;
-        border-radius: 3px;
-        padding: 2px 6px;
-        font-size: 12px;
-        color: #ccc;
-      `;
-      numberBadge.textContent = `${index + 1}`;
-      button.appendChild(numberBadge);
-
-      // Spawn point name
-      const name = document.createElement('div');
-      name.style.cssText = `
-        font-size: 18px;
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: ${point.safe ? '#00ff00' : '#ff6600'};
-      `;
-      name.textContent = point.name;
-      button.appendChild(name);
-
-      // Status indicator
-      const status = document.createElement('div');
-      status.style.cssText = `
-        font-size: 12px;
-        color: ${point.safe ? '#88ff88' : '#ffaa66'};
-      `;
-      status.textContent = point.safe ? '✓ SAFE' : '⚠ CONTESTED';
-      button.appendChild(status);
-
-      // Position info
-      const posInfo = document.createElement('div');
-      posInfo.style.cssText = `
-        font-size: 10px;
-        color: #666;
-        margin-top: 5px;
-      `;
-      posInfo.textContent = `Position: ${Math.round(point.position.x)}, ${Math.round(point.position.z)}`;
-      button.appendChild(posInfo);
-
-      // Click handler
-      button.onclick = () => this.selectSpawnPoint(point.id);
-
-      spawnList.appendChild(button);
-    });
+    // This method is no longer needed as the map is handled by RespawnMapView
+    // Keep empty for compatibility
   }
 
-  private selectSpawnPoint(pointId: string): void {
-    const spawnPoint = this.availableSpawnPoints.find(p => p.id === pointId);
+  private selectSpawnPointOnMap(zoneId: string, zoneName: string): void {
+    this.selectedSpawnPoint = zoneId;
+
+    // Update selected spawn info
+    const nameElement = document.getElementById('selected-spawn-name');
+    const statusElement = document.getElementById('selected-spawn-status');
+
+    if (nameElement) nameElement.textContent = zoneName;
+    if (statusElement) statusElement.textContent = 'Ready to deploy';
+
+    // Enable respawn button if timer is done
+    const respawnButton = document.getElementById('respawn-button') as HTMLButtonElement;
+    if (respawnButton && this.respawnTimer <= 0) {
+      respawnButton.disabled = false;
+      respawnButton.style.opacity = '1';
+      respawnButton.style.cursor = 'pointer';
+    }
+  }
+
+  private confirmRespawn(): void {
+    if (!this.selectedSpawnPoint) return;
+
+    const spawnPoint = this.availableSpawnPoints.find(p => p.id === this.selectedSpawnPoint);
     if (!spawnPoint) return;
 
-    console.log(`🎯 Spawning at ${spawnPoint.name}`);
-    this.selectedSpawnPoint = pointId;
+    console.log(`🎯 Deploying at ${spawnPoint.name}`);
     this.hideRespawnUI();
 
     // Add slight randomization to avoid spawn camping
@@ -447,11 +619,60 @@ export class PlayerRespawnManager implements GameSystem {
     this.respawn(finalPosition);
   }
 
+
   private hideRespawnUI(): void {
     this.isRespawnUIVisible = false;
     if (this.respawnUIContainer) {
       this.respawnUIContainer.style.display = 'none';
     }
     this.selectedSpawnPoint = undefined;
+    this.respawnMapView.clearSelection();
+  }
+
+  private updateTimerDisplay(): void {
+    const timerElement = document.getElementById('respawn-timer');
+    const respawnButton = document.getElementById('respawn-button') as HTMLButtonElement;
+
+    if (timerElement) {
+      if (this.respawnTimer > 0) {
+        timerElement.textContent = `Deployment available in ${Math.ceil(this.respawnTimer)}s`;
+        timerElement.style.color = '#ff6600';
+      } else {
+        timerElement.textContent = 'Ready for deployment';
+        timerElement.style.color = '#00ff00';
+      }
+    }
+
+    // Update button state
+    if (respawnButton) {
+      if (this.respawnTimer > 0 || !this.selectedSpawnPoint) {
+        respawnButton.disabled = true;
+        respawnButton.style.opacity = '0.5';
+        respawnButton.style.cursor = 'not-allowed';
+      } else {
+        respawnButton.disabled = false;
+        respawnButton.style.opacity = '1';
+        respawnButton.style.cursor = 'pointer';
+      }
+    }
+  }
+
+  private disableSpawnButtons(): void {
+    const respawnButton = document.getElementById('respawn-button') as HTMLButtonElement;
+    if (respawnButton) {
+      respawnButton.disabled = true;
+      respawnButton.style.opacity = '0.5';
+      respawnButton.style.cursor = 'not-allowed';
+    }
+  }
+
+  private enableSpawnButtons(): void {
+    const respawnButton = document.getElementById('respawn-button') as HTMLButtonElement;
+    if (respawnButton && this.selectedSpawnPoint) {
+      respawnButton.disabled = false;
+      respawnButton.style.opacity = '1';
+      respawnButton.style.cursor = 'pointer';
+    }
+    this.updateTimerDisplay();
   }
 }
