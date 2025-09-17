@@ -329,7 +329,7 @@ export class CombatantSystem implements GameSystem {
       const COMBAT_RANGE = 200; // Max engagement range + buffer
 
       if (distance > COMBAT_RANGE) {
-        combatant.lodLevel = 'simulated';
+        combatant.lodLevel = 'culled';
         // Just teleport them toward random zones occasionally
         const elapsedMs = now - (combatant.lastUpdateTime || 0);
         if (elapsedMs > 30000) { // Update every 30 seconds
@@ -634,6 +634,8 @@ export class CombatantSystem implements GameSystem {
     this.chunkManager = chunkManager;
     this.combatantMovement.setChunkManager(chunkManager);
     this.squadManager.setChunkManager(chunkManager);
+    this.combatantAI.setChunkManager(chunkManager);
+    this.combatantCombat.setChunkManager(chunkManager);
   }
 
   setTicketSystem(ticketSystem: TicketSystem): void {

@@ -326,7 +326,8 @@ export class FullMapSystem implements GameSystem {
     // Get camera direction for rotation
     const cameraDir = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDir);
-    this.playerRotation = Math.atan2(cameraDir.x, cameraDir.z);
+    // Heading from true north (-Z), turning clockwise toward +X (east)
+    this.playerRotation = Math.atan2(cameraDir.x, -cameraDir.z);
 
     // Update world size from game mode if needed
     if (this.gameModeManager) {
@@ -409,7 +410,10 @@ export class FullMapSystem implements GameSystem {
 
   private drawZone(ctx: CanvasRenderingContext2D, zone: CaptureZone): void {
     const scale = this.MAP_SIZE / this.worldSize;
-    const x = (zone.position.x + this.worldSize / 2) * scale;
+    // Fixed north-up map with flipped axes:
+    // Flip X axis: -X is right (west on right side)
+    // Flip Y axis: OPFOR (+Z) at top
+    const x = (this.worldSize / 2 - zone.position.x) * scale;
     const y = (this.worldSize / 2 - zone.position.z) * scale;
     const radius = zone.radius * scale * 2;
 
@@ -464,7 +468,10 @@ export class FullMapSystem implements GameSystem {
     combatants.forEach(combatant => {
       if (combatant.state === 'dead') return;
 
-      const x = (combatant.position.x + this.worldSize / 2) * scale;
+      // Fixed north-up map with flipped axes:
+      // Flip X axis: -X is right (west on right side)
+      // Flip Y axis: OPFOR (+Z) at top
+      const x = (this.worldSize / 2 - combatant.position.x) * scale;
       const y = (this.worldSize / 2 - combatant.position.z) * scale;
 
       ctx.fillStyle = combatant.faction === Faction.US ?
@@ -477,7 +484,10 @@ export class FullMapSystem implements GameSystem {
 
   private drawPlayer(ctx: CanvasRenderingContext2D): void {
     const scale = this.MAP_SIZE / this.worldSize;
-    const x = (this.playerPosition.x + this.worldSize / 2) * scale;
+    // Fixed north-up map with flipped axes:
+    // Flip X axis: -X is right (west on right side)
+    // Flip Y axis: OPFOR (+Z) at top
+    const x = (this.worldSize / 2 - this.playerPosition.x) * scale;
     const y = (this.worldSize / 2 - this.playerPosition.z) * scale;
 
     // Player position
@@ -486,27 +496,22 @@ export class FullMapSystem implements GameSystem {
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Player direction indicator
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-this.playerRotation);
+    // Player direction indicator (just the line arrow)
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    const lineLength = 18;
+    // On the double-flipped map: -X is right, -Z is up
+    const endX = x - forward.x * lineLength; // Negative because X is flipped
+    const endY = y - forward.z * lineLength; // Negative because +Z goes down
 
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -15);
+    ctx.moveTo(x, y);
+    ctx.lineTo(endX, endY);
     ctx.stroke();
 
-    // Direction cone
-    ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, 30, -Math.PI/6 - Math.PI/2, Math.PI/6 - Math.PI/2);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
+    // Remove the direction cone - just keep the line indicator
   }
 
   // System connections

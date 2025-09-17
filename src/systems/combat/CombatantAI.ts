@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { Combatant, CombatantState, Faction } from './types';
+import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 
 export class CombatantAI {
   private readonly FRIENDLY_FIRE_ENABLED = false;
   private readonly MAX_ENGAGEMENT_RANGE = 150;
+  private chunkManager?: ImprovedChunkManager;
 
   updateAI(
     combatant: Combatant,
@@ -222,7 +224,32 @@ export class CombatantAI {
     const angle = Math.acos(forward.dot(toTarget));
     const halfFov = THREE.MathUtils.degToRad(combatant.skillProfile.fieldOfView / 2);
 
-    return angle <= halfFov;
+    if (angle > halfFov) return false;
+
+    // Check terrain obstruction - only for high/medium LOD combatants for performance
+    if (this.chunkManager && combatant.lodLevel &&
+        (combatant.lodLevel === 'high' || combatant.lodLevel === 'medium')) {
+
+      // Create ray from combatant eye position to target
+      const eyePos = combatant.position.clone();
+      eyePos.y += 1.7; // Eye height
+
+      const targetEyePos = targetPos.clone();
+      targetEyePos.y += 1.7; // Target eye height
+
+      const direction = new THREE.Vector3()
+        .subVectors(targetEyePos, eyePos)
+        .normalize();
+
+      const terrainHit = this.chunkManager.raycastTerrain(eyePos, direction, distance);
+
+      if (terrainHit.hit && terrainHit.distance! < distance - 1) {
+        // Terrain blocks line of sight (with small buffer to avoid edge cases)
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private shouldEngage(combatant: Combatant, distance: number): boolean {
@@ -275,5 +302,12 @@ export class CombatantAI {
     });
 
     return count;
+  }
+
+  /**
+   * Set the chunk manager for terrain obstruction checks
+   */
+  setChunkManager(chunkManager: ImprovedChunkManager): void {
+    this.chunkManager = chunkManager;
   }
 }

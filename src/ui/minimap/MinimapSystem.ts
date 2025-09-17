@@ -57,18 +57,6 @@ export class MinimapSystem implements GameSystem {
       font-family: 'Courier New', monospace;
       pointer-events: none;
     }
-
-    .minimap-north {
-      position: absolute;
-      top: 6px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 11px;
-      font-weight: bold;
-      font-family: 'Courier New', monospace;
-      pointer-events: none;
-    }
   `;
 
   constructor(camera: THREE.Camera) {
@@ -85,11 +73,6 @@ export class MinimapSystem implements GameSystem {
     this.minimapCanvas.height = this.MINIMAP_SIZE;
     this.minimapContext = this.minimapCanvas.getContext('2d')!;
 
-    // Add north indicator
-    const northIndicator = document.createElement('div');
-    northIndicator.className = 'minimap-north';
-    northIndicator.textContent = 'N';
-
     // Add legend
     const legend = document.createElement('div');
     legend.className = 'minimap-legend';
@@ -105,7 +88,6 @@ export class MinimapSystem implements GameSystem {
     `;
 
     container.appendChild(this.minimapCanvas);
-    container.appendChild(northIndicator);
     container.appendChild(legend);
 
     // Add styles
@@ -136,8 +118,8 @@ export class MinimapSystem implements GameSystem {
     // Get camera direction for rotation
     const cameraDir = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDir);
-    // Standard atan2 for proper direction mapping: +X = East, +Z = South, -Z = North
-    this.playerRotation = Math.atan2(cameraDir.x, cameraDir.z);
+    // Yaw measured from true north (-Z) turning clockwise toward +X (east)
+    this.playerRotation = Math.atan2(cameraDir.x, -cameraDir.z);
 
     // Throttle updates
     const now = Date.now();
@@ -156,8 +138,7 @@ export class MinimapSystem implements GameSystem {
     ctx.fillStyle = 'rgba(20, 20, 30, 0.9)';
     ctx.fillRect(0, 0, size, size);
 
-    // Draw compass rose background
-    this.drawCompass(ctx);
+    // Compass is now a DOM element, no need to draw on canvas
 
     // Draw grid
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -197,7 +178,7 @@ export class MinimapSystem implements GameSystem {
     const relativePos = new THREE.Vector3()
       .subVectors(zone.position, this.playerPosition);
 
-    // Rotate relative to player view - correct rotation matrix for minimap
+    // Rotate world -> player-local by -heading so forward points up
     const cos = Math.cos(this.playerRotation);
     const sin = Math.sin(this.playerRotation);
     const rotatedX = relativePos.x * cos + relativePos.z * sin;
@@ -206,7 +187,7 @@ export class MinimapSystem implements GameSystem {
     // Scale to minimap
     const scale = this.MINIMAP_SIZE / this.WORLD_SIZE;
     const x = this.MINIMAP_SIZE / 2 + rotatedX * scale;
-    const y = this.MINIMAP_SIZE / 2 - rotatedZ * scale; // Invert Y for screen coordinates
+    const y = this.MINIMAP_SIZE / 2 + rotatedZ * scale;
 
     // Skip if outside minimap bounds
     if (x < -20 || x > this.MINIMAP_SIZE + 20 || y < -20 || y > this.MINIMAP_SIZE + 20) return;
@@ -285,7 +266,7 @@ export class MinimapSystem implements GameSystem {
       const relativePos = new THREE.Vector3()
         .subVectors(combatant.position, this.playerPosition);
 
-      // Rotate relative to player view - correct rotation matrix for minimap
+      // Rotate world -> player-local by -heading so forward points up
       const cos = Math.cos(this.playerRotation);
       const sin = Math.sin(this.playerRotation);
       const rotatedX = relativePos.x * cos + relativePos.z * sin;
@@ -293,7 +274,7 @@ export class MinimapSystem implements GameSystem {
 
       // Scale to minimap
       const x = this.MINIMAP_SIZE / 2 + rotatedX * scale;
-      const y = this.MINIMAP_SIZE / 2 - rotatedZ * scale;
+      const y = this.MINIMAP_SIZE / 2 + rotatedZ * scale;
 
       // Skip if outside minimap bounds
       if (x < 0 || x > this.MINIMAP_SIZE || y < 0 || y > this.MINIMAP_SIZE) return;
@@ -326,31 +307,42 @@ export class MinimapSystem implements GameSystem {
     const centerX = this.MINIMAP_SIZE / 2;
     const centerY = this.MINIMAP_SIZE / 2;
 
-    // Draw view direction line - always points up as player faces forward
+    // Calculate player facing direction in world space (not rotated minimap space)
+    const cameraDir = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraDir);
+
+    // Use the same heading angle used elsewhere
+    // In rotated minimap space, forward is up: use 0 angle
+    const angle = 0;
+
+    // Draw view direction line pointing in actual facing direction
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(centerX, centerY);
-    ctx.lineTo(centerX, centerY - 25); // Points up (forward direction)
+
+    const lineLength = 25;
+    const endX = centerX + Math.sin(angle) * lineLength;
+    const endY = centerY - Math.cos(angle) * lineLength;
+    ctx.lineTo(endX, endY);
     ctx.stroke();
 
-    // Add arrow head for clarity
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY - 25);
-    ctx.lineTo(centerX - 5, centerY - 20);
-    ctx.lineTo(centerX + 5, centerY - 20);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-    ctx.fill();
-
-    // Draw FOV cone
+    // Draw FOV cone as a filled wedge
     const fovAngle = Math.PI / 4; // 45 degrees each side
     const coneLength = 30;
+
+    const leftAngle = angle - fovAngle;
+    const rightAngle = angle + fovAngle;
+    const leftX = centerX + Math.sin(leftAngle) * coneLength;
+    const leftY = centerY - Math.cos(leftAngle) * coneLength;
+    const rightX = centerX + Math.sin(rightAngle) * coneLength;
+    const rightY = centerY - Math.cos(rightAngle) * coneLength;
 
     ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
     ctx.beginPath();
     ctx.moveTo(centerX, centerY);
-    ctx.arc(centerX, centerY, coneLength, -Math.PI/2 - fovAngle, -Math.PI/2 + fovAngle);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
     ctx.closePath();
     ctx.fill();
   }
@@ -371,80 +363,6 @@ export class MinimapSystem implements GameSystem {
     console.log(`🎮 Minimap world scale set to ${scale}`);
   }
 
-  private drawCompass(ctx: CanvasRenderingContext2D): void {
-    const centerX = this.MINIMAP_SIZE / 2;
-    const centerY = this.MINIMAP_SIZE / 2;
-    const compassRadius = 90;
-
-    ctx.save();
-    ctx.translate(centerX, centerY);
-
-    // Rotate compass based on player rotation
-    ctx.rotate(this.playerRotation);
-
-    // Draw compass markings
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
-
-    // Cardinal directions
-    const directions = [
-      { angle: 0, label: 'N', main: true },
-      { angle: Math.PI / 2, label: 'E', main: true },
-      { angle: Math.PI, label: 'S', main: true },
-      { angle: -Math.PI / 2, label: 'W', main: true },
-      { angle: Math.PI / 4, label: 'NE', main: false },
-      { angle: 3 * Math.PI / 4, label: 'SE', main: false },
-      { angle: -3 * Math.PI / 4, label: 'SW', main: false },
-      { angle: -Math.PI / 4, label: 'NW', main: false }
-    ];
-
-    directions.forEach(dir => {
-      ctx.save();
-      ctx.rotate(dir.angle);
-
-      // Draw tick mark
-      ctx.beginPath();
-      ctx.moveTo(0, -compassRadius + 10);
-      ctx.lineTo(0, -compassRadius + (dir.main ? 20 : 15));
-      ctx.stroke();
-
-      // Draw label for cardinal directions
-      if (dir.main) {
-        ctx.fillStyle = dir.label === 'N' ? 'rgba(255, 100, 100, 0.8)' : 'rgba(255, 255, 255, 0.6)';
-        ctx.font = dir.label === 'N' ? 'bold 14px Courier New' : '12px Courier New';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(dir.label, 0, -compassRadius + 30);
-      }
-
-      ctx.restore();
-    });
-
-    // Draw degree markings
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    for (let i = 0; i < 360; i += 10) {
-      if (i % 90 !== 0 && i % 45 !== 0) {
-        const angle = (i * Math.PI) / 180;
-        ctx.save();
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(0, -compassRadius + 12);
-        ctx.lineTo(0, -compassRadius + 14);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
-    ctx.restore();
-
-    // Draw bearing text - convert from radians to degrees
-    // In Three.js: -Z is North (0°), +X is East (90°), +Z is South (180°), -X is West (270°)
-    const bearing = Math.round(((-this.playerRotation * 180 / Math.PI) + 90 + 360) % 360);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.font = 'bold 11px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${bearing}°`, centerX, 15);
-  }
 
   dispose(): void {
     const container = (this.minimapCanvas as any).containerElement;

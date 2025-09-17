@@ -356,6 +356,46 @@ export class ImprovedChunkManager implements GameSystem {
     return chunk ? chunk.getHeightAt(x, z) : 0;
   }
 
+  /**
+   * Raycast against terrain to check for obstructions
+   * @param origin Starting point of the ray
+   * @param direction Direction of the ray (should be normalized)
+   * @param maxDistance Maximum distance to check
+   * @returns {hit: boolean, point?: THREE.Vector3, distance?: number}
+   */
+  raycastTerrain(origin: THREE.Vector3, direction: THREE.Vector3, maxDistance: number): {hit: boolean, point?: THREE.Vector3, distance?: number} {
+    const raycaster = new THREE.Raycaster();
+    raycaster.set(origin, direction);
+    raycaster.far = maxDistance;
+
+    // Collect all loaded terrain meshes
+    const terrainMeshes: THREE.Mesh[] = [];
+    this.chunks.forEach(chunk => {
+      const mesh = chunk.getTerrainMesh();
+      if (mesh) {
+        terrainMeshes.push(mesh);
+      }
+    });
+
+    if (terrainMeshes.length === 0) {
+      return { hit: false };
+    }
+
+    // Perform raycast against all terrain meshes
+    const intersects = raycaster.intersectObjects(terrainMeshes);
+
+    if (intersects.length > 0) {
+      const closest = intersects[0];
+      return {
+        hit: true,
+        point: closest.point,
+        distance: closest.distance
+      };
+    }
+
+    return { hit: false };
+  }
+
   getQueueSize(): number {
     return this.loadQueue.length;
   }

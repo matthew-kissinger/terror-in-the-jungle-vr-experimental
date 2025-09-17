@@ -18,6 +18,7 @@ import { GameModeManager } from '../systems/world/GameModeManager';
 import { GameMode } from '../config/gameModes';
 import { PlayerRespawnManager } from '../systems/player/PlayerRespawnManager';
 import { FullMapSystem } from '../ui/map/FullMapSystem';
+import { CompassSystem } from '../ui/compass/CompassSystem';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -40,6 +41,7 @@ export class SandboxSystemManager {
   public gameModeManager!: GameModeManager;
   public playerRespawnManager!: PlayerRespawnManager;
   public fullMapSystem!: FullMapSystem;
+  public compassSystem!: CompassSystem;
 
   async initializeSystems(
     scene: THREE.Scene,
@@ -84,6 +86,7 @@ export class SandboxSystemManager {
     this.hudSystem = new HUDSystem(camera, this.ticketSystem, this.playerHealthSystem, this.playerRespawnManager);
     this.minimapSystem = new MinimapSystem(camera);
     this.fullMapSystem = new FullMapSystem(camera);
+    this.compassSystem = new CompassSystem(camera);
     this.gameModeManager = new GameModeManager();
 
     this.connectSystems(scene, camera);
@@ -104,6 +107,7 @@ export class SandboxSystemManager {
       this.playerRespawnManager,
       this.minimapSystem,
       this.fullMapSystem,
+      this.compassSystem,
       this.hudSystem,
       this.skybox,
       this.gameModeManager

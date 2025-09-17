@@ -506,4 +506,11 @@ export class ImprovedChunk {
   setLODLevel(level: number): void {
     // Future: Implement LOD switching
   }
+
+  /**
+   * Get the terrain mesh for raycasting operations
+   */
+  getTerrainMesh(): THREE.Mesh | undefined {
+    return this.terrainMesh;
+  }
 }

@@ -7,6 +7,7 @@ import { PlayerHealthSystem } from '../player/PlayerHealthSystem';
 import { TicketSystem } from '../world/TicketSystem';
 import { AudioManager } from '../audio/AudioManager';
 import { CombatantHitDetection } from './CombatantHitDetection';
+import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 
 export interface CombatHitResult {
   hit: boolean;
@@ -26,6 +27,7 @@ export class CombatantCombat {
   private ticketSystem?: TicketSystem;
   private audioManager?: AudioManager;
   private hudSystem?: any;
+  private chunkManager?: ImprovedChunkManager;
 
   constructor(
     scene: THREE.Scene,
@@ -101,6 +103,29 @@ export class CombatantCombat {
       if (distance > 30) {
         const distancePenalty = Math.pow(1.5, (distance - 30) / 20); // Exponential growth
         accuracyMultiplier *= Math.min(distancePenalty, 8.0); // Cap at 8x inaccuracy
+      }
+
+      // Check terrain obstruction before firing - only for high/medium LOD combatants
+      if (this.chunkManager && combatant.lodLevel &&
+          (combatant.lodLevel === 'high' || combatant.lodLevel === 'medium')) {
+
+        const muzzlePos = combatant.position.clone();
+        muzzlePos.y += 1.5; // Muzzle height
+
+        const targetFirePos = targetPos.clone();
+        targetFirePos.y += 1.2; // Target center mass
+
+        const fireDirection = new THREE.Vector3()
+          .subVectors(targetFirePos, muzzlePos)
+          .normalize();
+
+        const terrainHit = this.chunkManager.raycastTerrain(muzzlePos, fireDirection, distance);
+
+        if (terrainHit.hit && terrainHit.distance! < distance - 0.5) {
+          // Terrain blocks shot, don't fire
+          combatant.currentBurst--; // Undo burst increment
+          return;
+        }
       }
     }
 
@@ -408,5 +433,9 @@ export class CombatantCombat {
 
   setAudioManager(manager: AudioManager): void {
     this.audioManager = manager;
+  }
+
+  setChunkManager(chunkManager: ImprovedChunkManager): void {
+    this.chunkManager = chunkManager;
   }
 }
