@@ -5,10 +5,10 @@ export class CompassSystem implements GameSystem {
   private camera: THREE.Camera;
 
   // DOM elements
-  private compassContainer: HTMLDivElement;
-  private compassRose: HTMLDivElement;
-  private headingText: HTMLElement;
-  private directionIndicator: HTMLElement;
+  private compassContainer!: HTMLDivElement;
+  private compassRose!: HTMLDivElement;
+  private headingText!: HTMLElement;
+  private directionIndicator!: HTMLElement;
 
   // Player tracking
   private playerHeading = 0; // In radians, 0 = North (-Z), π/2 = East (+X)

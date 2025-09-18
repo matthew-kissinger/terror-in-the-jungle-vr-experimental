@@ -12,7 +12,13 @@
       "Bash(ffmpeg:*)",
       "Bash(npx tsc:*)",
       "Bash(gh repo view:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo edit:*)",
+      "Bash(git push:*)",
+      "Bash(gh workflow view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": [],
     "ask": []
