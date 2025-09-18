@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import { GameSystem } from '../../types';
 import { AssetLoader } from '../assets/AssetLoader';
+import { getAssetPath } from '../../config/paths';
 
 export class WaterSystem implements GameSystem {
   private scene: THREE.Scene;
@@ -38,7 +39,7 @@ export class WaterSystem implements GameSystem {
     if (!waterNormals) {
       // Fallback: try to load it directly
       console.log('⏳ Loading water normal texture directly...');
-      waterNormals = await new THREE.TextureLoader().loadAsync('/assets/waternormals.jpg');
+      waterNormals = await new THREE.TextureLoader().loadAsync(getAssetPath('waternormals.jpg'));
     }
     
     // Configure texture wrapping for seamless tiling

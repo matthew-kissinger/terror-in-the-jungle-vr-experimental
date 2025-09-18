@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { AssetInfo, AssetCategory, GameSystem } from '../../types';
+import { getAssetPath } from '../../config/paths';
 
 export class AssetLoader implements GameSystem {
   private assets: Map<string, AssetInfo> = new Map();
@@ -59,7 +60,7 @@ export class AssetLoader implements GameSystem {
       const category = this.categorizeAsset(filename);
       const assetInfo: AssetInfo = {
         name: filename.replace('.png', '').replace('.jpg', ''),
-        path: `/assets/${filename}`,
+        path: getAssetPath(filename),
         category
       };
       
