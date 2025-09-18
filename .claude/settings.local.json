@@ -18,7 +18,8 @@
       "Bash(git push:*)",
       "Bash(gh workflow view:*)",
       "Bash(gh run list:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(gh api:*)"
     ],
     "deny": [],
     "ask": []
