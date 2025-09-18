@@ -47,5 +47,9 @@ export const SOUND_CONFIGS: Record<string, SoundConfig> = {
     path: 'assets/optimized/jungle2.ogg',
     volume: 0.25,
     loop: true
+  },
+  playerReload: {
+    path: 'assets/optimized/playerReload.ogg',
+    volume: 0.6
   }
 };

@@ -266,6 +266,55 @@ export class HUDStyles {
       from { opacity: 1; }
       to { opacity: 0; }
     }
+
+    /* Ammo display */
+    .ammo-display {
+      position: absolute;
+      bottom: 20px;
+      right: 280px;
+      background: rgba(10, 10, 14, 0.28);
+      backdrop-filter: blur(6px) saturate(1.1);
+      -webkit-backdrop-filter: blur(6px) saturate(1.1);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      min-width: 120px;
+      text-align: center;
+    }
+
+    .ammo-counter {
+      font-size: 24px;
+      font-weight: bold;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .ammo-magazine {
+      font-size: 28px;
+      transition: color 0.3s ease;
+    }
+
+    .ammo-separator {
+      font-size: 20px;
+      color: #666;
+    }
+
+    .ammo-reserve {
+      font-size: 20px;
+      color: #aaa;
+    }
+
+    .ammo-status {
+      font-size: 11px;
+      margin-top: 4px;
+      height: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: color 0.3s ease;
+    }
   `;
 
   static getInstance(): HUDStyles {

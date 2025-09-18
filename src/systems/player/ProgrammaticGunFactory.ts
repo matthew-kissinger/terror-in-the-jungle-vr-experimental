@@ -38,6 +38,16 @@ export class ProgrammaticGunFactory {
     grip.rotation.z = 0.35;
     group.add(grip);
 
+    // Magazine (separate for reload animation)
+    const magazine = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.25, 0.14),
+      new THREE.MeshBasicMaterial({ color: 0x1a1a1a })
+    );
+    magazine.name = 'magazine';
+    magazine.position.set(0.2, -0.25, 0);
+    magazine.rotation.z = 0.1;
+    group.add(magazine);
+
     // Rear sight
     const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.12), new THREE.MeshBasicMaterial({ color: 0x111111 }));
     rearSight.position.set(-0.1, 0.12, 0);

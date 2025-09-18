@@ -98,4 +98,8 @@ export class HUDSystem implements GameSystem {
   showMessage(message: string, duration: number = 3000): void {
     this.elements.showMessage(message, duration);
   }
+
+  updateAmmoDisplay(magazine: number, reserve: number): void {
+    this.elements.updateAmmoDisplay(magazine, reserve);
+  }
 }

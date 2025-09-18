@@ -10,6 +10,8 @@ import { CombatantSystem } from '../combat/CombatantSystem';
 import { AssetLoader } from '../assets/AssetLoader';
 import { PlayerController } from './PlayerController';
 import { AudioManager } from '../audio/AudioManager';
+import { AmmoManager } from '../weapons/AmmoManager';
+import { ZoneManager } from '../world/ZoneManager';
 
 export class FirstPersonWeapon implements GameSystem {
   private scene: THREE.Scene;
@@ -23,6 +25,7 @@ export class FirstPersonWeapon implements GameSystem {
   private weaponCamera: THREE.OrthographicCamera;
   private weaponRig?: THREE.Group; // rig root
   private muzzleRef?: THREE.Object3D;
+  private magazineRef?: THREE.Object3D; // Magazine for reload animation
   
   // Animation state
   private isADS = false;
@@ -66,6 +69,17 @@ export class FirstPersonWeapon implements GameSystem {
   private combatantSystem?: CombatantSystem;
   private hudSystem?: any; // HUD system for hit markers
   private audioManager?: AudioManager;
+  private ammoManager: AmmoManager;
+  private zoneManager?: ZoneManager;
+
+  // Reload animation state
+  private reloadAnimationProgress = 0;
+  private isReloadAnimating = false;
+  private readonly RELOAD_ANIMATION_TIME = 2.5;
+  private reloadRotation = { x: 0, y: 0, z: 0 };
+  private reloadTranslation = { x: 0, y: 0, z: 0 };
+  private magazineOffset = { x: 0, y: 0, z: 0 }; // Magazine animation offset
+  private magazineRotation = { x: 0, y: 0, z: 0 }; // Magazine rotation during reload
   
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -85,11 +99,17 @@ export class FirstPersonWeapon implements GameSystem {
     window.addEventListener('mouseup', this.onMouseUp.bind(this));
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    window.addEventListener('keydown', this.onKeyDown.bind(this));
 
     this.tracerPool = new TracerPool(this.scene, 96);
     this.muzzleFlashPool = new MuzzleFlashPool(this.scene, 32);
     this.impactEffectsPool = new ImpactEffectsPool(this.scene, 32);
     this.gunCore = new GunplayCore(this.weaponSpec);
+
+    // Initialize ammo manager
+    this.ammoManager = new AmmoManager(30, 90); // 30 rounds per mag, 90 reserve
+    this.ammoManager.setOnReloadComplete(() => this.onReloadComplete());
+    this.ammoManager.setOnAmmoChange((state) => this.onAmmoChange(state));
   }
 
   async init(): Promise<void> {
@@ -101,6 +121,7 @@ export class FirstPersonWeapon implements GameSystem {
     // Don't set rotation here - it will be handled in updateWeaponTransform
     this.weaponScene.add(this.weaponRig);
     this.muzzleRef = this.weaponRig.getObjectByName('muzzle') || undefined;
+    this.magazineRef = this.weaponRig.getObjectByName('magazine') || undefined;
 
     // Store base FOV from camera
     if (this.camera instanceof THREE.PerspectiveCamera) {
@@ -108,12 +129,19 @@ export class FirstPersonWeapon implements GameSystem {
     }
 
     console.log('✅ First Person Weapon initialized (programmatic rifle)');
+
+    // Trigger initial ammo display
+    this.onAmmoChange(this.ammoManager.getState());
   }
 
   private isEnabled = true; // For death system
 
   update(deltaTime: number): void {
     if (!this.weaponRig || !this.isEnabled) return;
+
+    // Update ammo manager with player position for zone resupply
+    const playerPos = this.playerController?.getPosition();
+    this.ammoManager.update(deltaTime, playerPos);
     
     // Update idle animation
     this.idleTime += deltaTime;
@@ -153,6 +181,11 @@ export class FirstPersonWeapon implements GameSystem {
     // Apply recoil recovery spring physics
     this.updateRecoilRecovery(deltaTime);
 
+    // Update reload animation
+    if (this.isReloadAnimating) {
+      this.updateReloadAnimation(deltaTime);
+    }
+
     // Apply overlay transform
     this.updateWeaponTransform();
 
@@ -174,6 +207,7 @@ export class FirstPersonWeapon implements GameSystem {
     window.removeEventListener('mousedown', this.onMouseDown.bind(this));
     window.removeEventListener('mouseup', this.onMouseUp.bind(this));
     window.removeEventListener('resize', this.onWindowResize.bind(this));
+    window.removeEventListener('keydown', this.onKeyDown.bind(this));
     this.tracerPool.dispose();
     this.muzzleFlashPool.dispose();
     this.impactEffectsPool.dispose();
@@ -207,14 +241,18 @@ export class FirstPersonWeapon implements GameSystem {
     if (!this.gameStarted || !this.isEnabled || !this.weaponRig) return;
 
     if (event.button === 2) {
-      // Right mouse - ADS toggle hold
-      this.isADS = true;
+      // Right mouse - ADS toggle hold (can't ADS while reloading)
+      if (!this.isReloadAnimating) {
+        this.isADS = true;
+      }
       return;
     }
     if (event.button === 0) {
-      // Left mouse - start firing
-      this.isFiring = true;
-      this.tryFire();
+      // Left mouse - start firing (can't fire while reloading)
+      if (!this.isReloadAnimating) {
+        this.isFiring = true;
+        this.tryFire();
+      }
     }
   }
 
@@ -234,11 +272,11 @@ export class FirstPersonWeapon implements GameSystem {
     const py = THREE.MathUtils.lerp(this.basePosition.y, this.adsPosition.y, this.adsProgress);
     const pz = THREE.MathUtils.lerp(this.basePosition.z, this.adsPosition.z, this.adsProgress);
 
-    // Apply position with all offsets including recoil
+    // Apply position with all offsets including recoil and reload animation
     this.weaponRig.position.set(
-      px + this.bobOffset.x + this.swayOffset.x + this.weaponRecoilOffset.x,
-      py + this.bobOffset.y + this.swayOffset.y + this.weaponRecoilOffset.y,
-      pz + this.weaponRecoilOffset.z
+      px + this.bobOffset.x + this.swayOffset.x + this.weaponRecoilOffset.x + this.reloadTranslation.x,
+      py + this.bobOffset.y + this.swayOffset.y + this.weaponRecoilOffset.y + this.reloadTranslation.y,
+      pz + this.weaponRecoilOffset.z + this.reloadTranslation.z
     );
 
     // Set up base rotations to point barrel toward crosshair
@@ -247,15 +285,26 @@ export class FirstPersonWeapon implements GameSystem {
     const adsYRotation = Math.PI / 2; // Straight forward for ADS
     this.weaponRig.rotation.y = THREE.MathUtils.lerp(baseYRotation, adsYRotation, this.adsProgress);
 
-    // X rotation: tilt barrel UPWARD toward crosshair
+    // X rotation: tilt barrel UPWARD toward crosshair + reload animation
     const baseXRotation = THREE.MathUtils.degToRad(18); // More upward tilt when not ADS
     const adsXRotation = 0; // Level for sight alignment
-    this.weaponRig.rotation.x = THREE.MathUtils.lerp(baseXRotation, adsXRotation, this.adsProgress) + this.weaponRecoilOffset.rotX;
+    this.weaponRig.rotation.x = THREE.MathUtils.lerp(baseXRotation, adsXRotation, this.adsProgress) + this.weaponRecoilOffset.rotX + this.reloadRotation.x;
 
-    // Z rotation: cant the gun
+    // Z rotation: cant the gun + reload tilt
     const baseCant = THREE.MathUtils.degToRad(-8); // Negative for proper cant
     const adsCant = 0; // No cant in ADS
-    this.weaponRig.rotation.z = THREE.MathUtils.lerp(baseCant, adsCant, this.adsProgress);
+    this.weaponRig.rotation.z = THREE.MathUtils.lerp(baseCant, adsCant, this.adsProgress) + this.reloadRotation.z;
+
+    // Update magazine position if it exists
+    if (this.magazineRef && this.isReloadAnimating) {
+      this.magazineRef.position.x = 0.2 + this.magazineOffset.x;
+      this.magazineRef.position.y = -0.25 + this.magazineOffset.y;
+      this.magazineRef.position.z = 0 + this.magazineOffset.z;
+
+      this.magazineRef.rotation.x = this.magazineRotation.x;
+      this.magazineRef.rotation.y = this.magazineRotation.y;
+      this.magazineRef.rotation.z = 0.1 + this.magazineRotation.z;
+    }
   }
 
   private updateRecoilRecovery(deltaTime: number): void {
@@ -313,6 +362,22 @@ export class FirstPersonWeapon implements GameSystem {
   
   private tryFire(): void {
     if (!this.combatantSystem || !this.gunCore.canFire() || !this.isEnabled) return;
+
+    // Check ammo
+    if (!this.ammoManager.canFire()) {
+      if (this.ammoManager.isEmpty()) {
+        // Play empty click sound
+        console.log('🔫 *click* - Empty magazine!');
+        // Auto-reload if we have reserve ammo
+        if (this.ammoManager.getState().reserveAmmo > 0) {
+          this.startReload();
+        }
+      }
+      return;
+    }
+
+    // Consume ammo
+    if (!this.ammoManager.consumeRound()) return;
     this.gunCore.registerShot();
 
     // Play player gunshot sound
@@ -384,6 +449,11 @@ export class FirstPersonWeapon implements GameSystem {
     this.audioManager = audioManager;
   }
 
+  setZoneManager(zoneManager: ZoneManager): void {
+    this.zoneManager = zoneManager;
+    this.ammoManager.setZoneManager(zoneManager);
+  }
+
   // Disable weapon (for death)
   disable(): void {
     this.isEnabled = false;
@@ -400,10 +470,168 @@ export class FirstPersonWeapon implements GameSystem {
     if (this.weaponRig) {
       this.weaponRig.visible = true;
     }
+    // Reset ammo on respawn
+    this.ammoManager.reset();
   }
 
   // Set game started state
   setGameStarted(started: boolean): void {
     this.gameStarted = started;
+  }
+
+  private onKeyDown(event: KeyboardEvent): void {
+    if (!this.gameStarted || !this.isEnabled) return;
+
+    if (event.key.toLowerCase() === 'r') {
+      this.startReload();
+    }
+  }
+
+  private startReload(): void {
+    // Can't reload while ADS
+    if (this.isADS) {
+      console.log('⚠️ Cannot reload while aiming');
+      return;
+    }
+
+    if (this.ammoManager.startReload()) {
+      this.isReloadAnimating = true;
+      this.reloadAnimationProgress = 0;
+      this.isFiring = false; // Stop firing during reload
+
+      // Play reload sound if available
+      if (this.audioManager) {
+        this.audioManager.playReloadSound();
+      }
+    }
+  }
+
+  private updateReloadAnimation(deltaTime: number): void {
+    if (!this.isReloadAnimating) return;
+
+    // Update reload animation progress
+    this.reloadAnimationProgress += deltaTime / this.RELOAD_ANIMATION_TIME;
+
+    if (this.reloadAnimationProgress >= 1) {
+      this.reloadAnimationProgress = 1;
+      this.isReloadAnimating = false;
+      // Reset animation values
+      this.reloadRotation = { x: 0, y: 0, z: 0 };
+      this.reloadTranslation = { x: 0, y: 0, z: 0 };
+      this.magazineOffset = { x: 0, y: 0, z: 0 };
+      this.magazineRotation = { x: 0, y: 0, z: 0 };
+
+      // Reset magazine to default position
+      if (this.magazineRef) {
+        this.magazineRef.position.set(0.2, -0.25, 0);
+        this.magazineRef.rotation.set(0, 0, 0.1);
+      }
+      return;
+    }
+
+    // Calculate reload animation based on progress
+    this.calculateReloadAnimation(this.reloadAnimationProgress);
+  }
+
+  private calculateReloadAnimation(progress: number): void {
+    // Multi-stage reload animation with magazine detachment
+    // Stage 1 (0-20%): Tilt gun right to expose magazine
+    // Stage 2 (20-40%): Pull magazine out downward
+    // Stage 3 (40-50%): Magazine falls away, pause
+    // Stage 4 (50-70%): Insert new magazine from below
+    // Stage 5 (70-85%): Rotate gun back to center
+    // Stage 6 (85-100%): Chamber round (slight pull back)
+
+    if (progress < 0.2) {
+      // Stage 1: Tilt gun right
+      const t = progress / 0.2;
+      const ease = this.easeInOutQuad(t);
+      this.reloadRotation.z = THREE.MathUtils.degToRad(-25) * ease; // Tilt right
+      this.reloadRotation.y = THREE.MathUtils.degToRad(15) * ease; // Turn slightly
+      this.reloadTranslation.x = 0.15 * ease; // Move right slightly
+    } else if (progress < 0.4) {
+      // Stage 2: Pull mag out downward
+      const t = (progress - 0.2) / 0.2;
+      const ease = this.easeOutCubic(t);
+      this.reloadRotation.z = THREE.MathUtils.degToRad(-25);
+      this.reloadRotation.y = THREE.MathUtils.degToRad(15);
+      this.reloadTranslation.x = 0.15;
+
+      // Magazine detaches and drops
+      this.magazineOffset.y = -0.4 * ease; // Drop down
+      this.magazineOffset.x = -0.1 * ease; // Slight left movement
+      this.magazineRotation.z = THREE.MathUtils.degToRad(-15) * ease; // Tilt as it drops
+    } else if (progress < 0.5) {
+      // Stage 3: Magazine fully detached, pause
+      this.reloadRotation.z = THREE.MathUtils.degToRad(-25);
+      this.reloadRotation.y = THREE.MathUtils.degToRad(15);
+      this.reloadTranslation.x = 0.15;
+
+      // Magazine fully dropped
+      this.magazineOffset.y = -0.6; // Off screen
+      this.magazineOffset.x = -0.15;
+      this.magazineRotation.z = THREE.MathUtils.degToRad(-20);
+    } else if (progress < 0.7) {
+      // Stage 4: Insert new mag from below
+      const t = (progress - 0.5) / 0.2;
+      const ease = this.easeInCubic(t);
+      this.reloadRotation.z = THREE.MathUtils.degToRad(-25);
+      this.reloadRotation.y = THREE.MathUtils.degToRad(15);
+      this.reloadTranslation.x = 0.15;
+
+      // Magazine slides back up into place
+      this.magazineOffset.y = -0.6 + (0.6 * ease); // Rise from below
+      this.magazineOffset.x = -0.15 + (0.15 * ease); // Move back to center
+      this.magazineRotation.z = THREE.MathUtils.degToRad(-20) * (1 - ease); // Straighten
+    } else if (progress < 0.85) {
+      // Stage 5: Rotate gun back to center
+      const t = (progress - 0.7) / 0.15;
+      const ease = this.easeInOutQuad(t);
+      this.reloadRotation.z = THREE.MathUtils.degToRad(-25) * (1 - ease);
+      this.reloadRotation.y = THREE.MathUtils.degToRad(15) * (1 - ease);
+      this.reloadTranslation.x = 0.15 * (1 - ease);
+
+      // Magazine locked in place
+      this.magazineOffset.y = 0;
+      this.magazineOffset.x = 0;
+      this.magazineRotation.z = 0;
+    } else {
+      // Stage 6: Chamber round (slight pull back)
+      const t = (progress - 0.85) / 0.15;
+      const ease = this.easeOutCubic(t);
+      const pullBack = ease < 0.5 ? ease * 2 : (1 - ease) * 2;
+      this.reloadTranslation.z = -0.05 * pullBack; // Pull back slightly
+      this.reloadRotation.x = THREE.MathUtils.degToRad(-3) * pullBack; // Slight upward kick
+
+      // Magazine stays in place
+      this.magazineOffset.y = 0;
+      this.magazineOffset.x = 0;
+      this.magazineRotation.z = 0;
+    }
+  }
+
+  private easeInCubic(t: number): number {
+    return t * t * t;
+  }
+
+  private onReloadComplete(): void {
+    console.log('✅ Weapon reloaded!');
+    // Reload animation will finish independently
+  }
+
+  private onAmmoChange(state: any): void {
+    // Update HUD if available
+    if (this.hudSystem) {
+      this.hudSystem.updateAmmoDisplay(state.currentMagazine, state.reserveAmmo);
+    }
+
+    // Check for low ammo warning
+    if (this.ammoManager.isLowAmmo()) {
+      console.log('⚠️ Low ammo!');
+    }
+  }
+
+  getAmmoState(): any {
+    return this.ammoManager.getState();
   }
 }

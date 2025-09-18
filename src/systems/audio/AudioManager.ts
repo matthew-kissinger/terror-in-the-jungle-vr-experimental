@@ -15,6 +15,7 @@ export class AudioManager implements GameSystem {
     private playerGunshotPool: THREE.Audio[] = [];
     private positionalGunshotPool: THREE.PositionalAudio[] = [];
     private deathSoundPool: THREE.PositionalAudio[] = [];
+    private playerReloadPool: THREE.Audio[] = [];
 
     // Ambient sounds
     private ambientSounds: THREE.Audio[] = [];
@@ -23,6 +24,7 @@ export class AudioManager implements GameSystem {
     // Pool sizes
     private readonly GUNSHOT_POOL_SIZE = AUDIO_POOL_SIZES.gunshot;
     private readonly DEATH_POOL_SIZE = AUDIO_POOL_SIZES.death;
+    private readonly RELOAD_POOL_SIZE = 3; // Only need a few reload sounds
 
     // Sound configurations
     private readonly soundConfigs: Record<string, SoundConfig> = SOUND_CONFIGS;
@@ -167,6 +169,17 @@ export class AudioManager implements GameSystem {
 
             this.deathSoundPool.push(allySound, enemySound);
         }
+
+        // Initialize reload sound pool
+        for (let i = 0; i < this.RELOAD_POOL_SIZE; i++) {
+            const sound = new THREE.Audio(this.listener);
+            const buffer = this.audioBuffers.get('playerReload');
+            if (buffer) {
+                sound.setBuffer(buffer);
+                sound.setVolume(this.soundConfigs.playerReload?.volume || 0.6);
+            }
+            this.playerReloadPool.push(sound);
+        }
     }
 
     private startAmbientSounds(): void {
@@ -207,6 +220,14 @@ export class AudioManager implements GameSystem {
     // Play player's own gunshot (non-positional)
     playPlayerGunshot(): void {
         const sound = this.getAvailableSound(this.playerGunshotPool);
+        if (sound && !sound.isPlaying) {
+            sound.play();
+        }
+    }
+
+    // Play reload sound
+    playReloadSound(): void {
+        const sound = this.getAvailableSound(this.playerReloadPool);
         if (sound && !sound.isPlaying) {
             sound.play();
         }
@@ -332,6 +353,7 @@ export class AudioManager implements GameSystem {
         this.playerGunshotPool = [];
         this.positionalGunshotPool = [];
         this.deathSoundPool = [];
+        this.playerReloadPool = [];
         this.ambientSounds = [];
 
         // Clear buffers

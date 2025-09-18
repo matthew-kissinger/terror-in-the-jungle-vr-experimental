@@ -91,8 +91,9 @@ export class PlayerHealthEffects {
 
       // Calculate angle relative to camera forward
       // Use atan2 to get the angle in the correct quadrant
+      // Note: Negate the cross product to fix left/right reversal
       const angle = Math.atan2(
-        toSource.x * cameraForward.z - toSource.z * cameraForward.x,
+        -(toSource.x * cameraForward.z - toSource.z * cameraForward.x),
         toSource.x * cameraForward.x + toSource.z * cameraForward.z
       );
 
