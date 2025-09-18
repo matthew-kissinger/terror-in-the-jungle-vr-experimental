@@ -9,7 +9,10 @@
       "Bash(npm run typecheck:*)",
       "Bash(npm run:*)",
       "Bash(powershell:*)",
-      "Bash(ffmpeg:*)"
+      "Bash(ffmpeg:*)",
+      "Bash(npx tsc:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

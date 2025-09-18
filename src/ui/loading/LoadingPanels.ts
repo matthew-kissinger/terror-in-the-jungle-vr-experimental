@@ -19,7 +19,9 @@ export class LoadingPanels {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.9);
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 10001;
       justify-content: center;
       align-items: center;
@@ -27,19 +29,23 @@ export class LoadingPanels {
 
     panel.innerHTML = `
       <div style="
-        background: linear-gradient(135deg, #1a2f1a 0%, #0d1a0d 100%);
-        border: 2px solid #4a7c4e;
-        border-radius: 10px;
-        padding: 30px;
+        background: rgba(20, 35, 50, 0.9);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(127, 180, 217, 0.3);
+        border-radius: 20px;
+        padding: 2rem;
         max-width: 500px;
-        color: #c4b5a0;
-        font-family: 'Courier New', monospace;
+        width: 90%;
+        color: #e8f4f8;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
       ">
-        <h2 style="color: #8fbc8f; margin-bottom: 20px;">SETTINGS</h2>
+        <h2 style="color: #7fb4d9; margin-bottom: 1.5rem; font-weight: 300; letter-spacing: 0.1em;">SETTINGS</h2>
 
-        <div style="margin: 15px 0;">
-          <label style="display: block; margin-bottom: 5px;">Graphics Quality</label>
-          <select style="width: 100%; padding: 5px; background: rgba(0,0,0,0.5); color: #c4b5a0; border: 1px solid #4a7c4e;">
+        <div style="margin: 1rem 0;">
+          <label style="display: block; margin-bottom: 0.5rem; color: #b8d4e3; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Graphics Quality</label>
+          <select style="width: 100%; padding: 0.75rem; background: rgba(255, 255, 255, 0.05); color: #e8f4f8; border: 1px solid rgba(127, 180, 217, 0.3); border-radius: 8px; font-family: inherit;">
             <option>Low</option>
             <option selected>Medium</option>
             <option>High</option>
@@ -47,37 +53,40 @@ export class LoadingPanels {
           </select>
         </div>
 
-        <div style="margin: 15px 0;">
-          <label style="display: block; margin-bottom: 5px;">Master Volume</label>
-          <input type="range" min="0" max="100" value="70" style="width: 100%;">
+        <div style="margin: 1rem 0;">
+          <label style="display: block; margin-bottom: 0.5rem; color: #b8d4e3; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Master Volume</label>
+          <input type="range" min="0" max="100" value="70" style="width: 100%; appearance: none; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; outline: none;">
         </div>
 
-        <div style="margin: 15px 0;">
-          <label style="display: block; margin-bottom: 5px;">Mouse Sensitivity</label>
-          <input type="range" min="1" max="10" value="5" style="width: 100%;">
+        <div style="margin: 1rem 0;">
+          <label style="display: block; margin-bottom: 0.5rem; color: #b8d4e3; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Mouse Sensitivity</label>
+          <input type="range" min="1" max="10" value="5" style="width: 100%; appearance: none; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; outline: none;">
         </div>
 
-        <div style="margin: 15px 0;">
-          <label>
-            <input type="checkbox" checked> Show FPS Counter
+        <div style="margin: 1rem 0;">
+          <label style="color: #b8d4e3; cursor: pointer; display: flex; align-items: center;">
+            <input type="checkbox" checked style="margin-right: 0.5rem;"> Show FPS Counter
           </label>
         </div>
 
-        <div style="margin: 15px 0;">
-          <label>
-            <input type="checkbox" checked> Enable Shadows
+        <div style="margin: 1rem 0;">
+          <label style="color: #b8d4e3; cursor: pointer; display: flex; align-items: center;">
+            <input type="checkbox" checked style="margin-right: 0.5rem;"> Enable Shadows
           </label>
         </div>
 
         <button class="close-settings" style="
-          margin-top: 20px;
-          padding: 10px 30px;
-          background: linear-gradient(135deg, #2d4a2b 0%, #4a7c4e 100%);
+          margin-top: 1.5rem;
+          padding: 0.75rem 2rem;
+          background: linear-gradient(135deg, #5a8fb5, #7fb4d9);
           color: white;
-          border: 2px solid #4a7c4e;
-          border-radius: 5px;
+          border: 1px solid rgba(127, 180, 217, 0.3);
+          border-radius: 50px;
           cursor: pointer;
-          font-family: 'Courier New', monospace;
+          font-family: inherit;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          transition: all 0.3s;
         ">CLOSE</button>
       </div>
     `;
@@ -109,7 +118,9 @@ export class LoadingPanels {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.9);
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 10001;
       justify-content: center;
       align-items: center;
@@ -118,19 +129,23 @@ export class LoadingPanels {
 
     panel.innerHTML = `
       <div style="
-        background: linear-gradient(135deg, #1a2f1a 0%, #0d1a0d 100%);
-        border: 2px solid #4a7c4e;
-        border-radius: 10px;
-        padding: 30px;
+        background: rgba(20, 35, 50, 0.9);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(127, 180, 217, 0.3);
+        border-radius: 20px;
+        padding: 2rem;
         max-width: 600px;
-        color: #c4b5a0;
-        font-family: 'Courier New', monospace;
+        width: 90%;
+        color: #e8f4f8;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
         margin: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
       ">
-        <h2 style="color: #8fbc8f; margin-bottom: 20px;">HOW TO PLAY</h2>
+        <h2 style="color: #7fb4d9; margin-bottom: 1.5rem; font-weight: 300; letter-spacing: 0.1em;">HOW TO PLAY</h2>
 
-        <h3 style="color: #708070; margin-top: 20px;">CONTROLS</h3>
-        <ul style="list-style: none; padding: 0;">
+        <h3 style="color: #9fcfeb; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1rem; font-weight: 500; letter-spacing: 0.05em;">CONTROLS</h3>
+        <ul style="list-style: none; padding: 0; color: #b8d4e3; line-height: 1.8;">
           <li>⌨️ WASD - Move</li>
           <li>⌨️ SHIFT - Sprint</li>
           <li>⌨️ SPACE - Jump</li>
@@ -140,14 +155,14 @@ export class LoadingPanels {
           <li>⌨️ ESC - Release mouse lock</li>
         </ul>
 
-        <h3 style="color: #708070; margin-top: 20px;">OBJECTIVE</h3>
-        <p>Capture and hold zones to drain enemy tickets. The team that runs out of tickets first loses!</p>
+        <h3 style="color: #9fcfeb; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1rem; font-weight: 500; letter-spacing: 0.05em;">OBJECTIVE</h3>
+        <p style="color: #b8d4e3; line-height: 1.6;">Capture and hold zones to drain enemy tickets. The team that runs out of tickets first loses!</p>
 
-        <h3 style="color: #708070; margin-top: 20px;">ZONES</h3>
-        <p>Stand in neutral or enemy zones to capture them. More teammates in a zone = faster capture!</p>
+        <h3 style="color: #9fcfeb; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1rem; font-weight: 500; letter-spacing: 0.05em;">ZONES</h3>
+        <p style="color: #b8d4e3; line-height: 1.6;">Stand in neutral or enemy zones to capture them. More teammates in a zone = faster capture!</p>
 
-        <h3 style="color: #708070; margin-top: 20px;">COMBAT TIPS</h3>
-        <ul style="list-style: none; padding: 0;">
+        <h3 style="color: #9fcfeb; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1rem; font-weight: 500; letter-spacing: 0.05em;">COMBAT TIPS</h3>
+        <ul style="list-style: none; padding: 0; color: #b8d4e3; line-height: 1.8;">
           <li>🎯 Headshots deal 70% more damage</li>
           <li>🌲 Use vegetation for cover</li>
           <li>👂 Listen for enemy gunfire</li>
@@ -155,14 +170,17 @@ export class LoadingPanels {
         </ul>
 
         <button class="close-how-to-play" style="
-          margin-top: 20px;
-          padding: 10px 30px;
-          background: linear-gradient(135deg, #2d4a2b 0%, #4a7c4e 100%);
+          margin-top: 1.5rem;
+          padding: 0.75rem 2rem;
+          background: linear-gradient(135deg, #5a8fb5, #7fb4d9);
           color: white;
-          border: 2px solid #4a7c4e;
-          border-radius: 5px;
+          border: 1px solid rgba(127, 180, 217, 0.3);
+          border-radius: 50px;
           cursor: pointer;
-          font-family: 'Courier New', monospace;
+          font-family: inherit;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          transition: all 0.3s;
         ">CLOSE</button>
       </div>
     `;

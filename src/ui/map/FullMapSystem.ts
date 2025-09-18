@@ -20,6 +20,7 @@ export class FullMapSystem implements GameSystem {
   private readonly MAP_SIZE = 800;
   private worldSize = 3200; // Will be updated based on game mode
   private isVisible = false;
+  private readonly BASE_WORLD_SIZE = 400; // Zone Control world size as baseline for scaling
 
   // Player tracking
   private playerPosition = new THREE.Vector3();
@@ -27,8 +28,9 @@ export class FullMapSystem implements GameSystem {
 
   // Controls
   private zoomLevel = 1;
+  private defaultZoomLevel = 1; // Will be set based on game mode
   private readonly MIN_ZOOM = 0.5;
-  private readonly MAX_ZOOM = 3;
+  private readonly MAX_ZOOM = 8; // Increased max zoom for Open Frontier
 
   private readonly MAP_STYLES = `
     .full-map-container {
@@ -266,7 +268,7 @@ export class FullMapSystem implements GameSystem {
     const reset = document.createElement('button');
     reset.className = 'map-control-button';
     reset.textContent = '⟲';
-    reset.onclick = () => { this.zoomLevel = 1; this.render(); };
+    reset.onclick = () => { this.zoomLevel = this.defaultZoomLevel; this.render(); };
 
     controls.appendChild(zoomIn);
     controls.appendChild(zoomOut);
@@ -343,7 +345,35 @@ export class FullMapSystem implements GameSystem {
   private show(): void {
     this.isVisible = true;
     this.mapContainer.classList.add('visible');
+    // Auto-fit to show all zones when opening the map
+    this.autoFitView();
     this.render();
+  }
+
+  private autoFitView(): void {
+    // Calculate the optimal zoom to show all zones
+    // For Open Frontier (3200 world size), we want to see everything
+    // For Zone Control (400 world size), default zoom is fine
+
+    if (this.worldSize > this.BASE_WORLD_SIZE) {
+      // For larger worlds, calculate zoom to fit all content with some padding
+      // We want the entire world to fit in about 80% of the map canvas
+      const targetViewSize = this.MAP_SIZE * 0.8;
+      const requiredScale = targetViewSize / this.worldSize;
+
+      // The base scale is MAP_SIZE / worldSize, so we need to compensate
+      const baseScale = this.MAP_SIZE / this.worldSize;
+      this.zoomLevel = requiredScale / baseScale;
+
+      // Clamp to reasonable bounds
+      this.zoomLevel = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoomLevel));
+    } else {
+      // For Zone Control, use a comfortable default that shows all zones
+      this.zoomLevel = 1.0;
+    }
+
+    // Update the default zoom level for reset button
+    this.defaultZoomLevel = this.zoomLevel;
   }
 
   private hide(): void {
@@ -352,7 +382,9 @@ export class FullMapSystem implements GameSystem {
   }
 
   private zoom(delta: number): void {
-    this.zoomLevel = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoomLevel + delta));
+    // Scale zoom speed based on current zoom level for smoother control
+    const scaledDelta = delta * Math.sqrt(this.zoomLevel);
+    this.zoomLevel = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoomLevel + scaledDelta));
     this.render();
   }
 
@@ -415,7 +447,11 @@ export class FullMapSystem implements GameSystem {
     // Flip Y axis: OPFOR (+Z) at top
     const x = (this.worldSize / 2 - zone.position.x) * scale;
     const y = (this.worldSize / 2 - zone.position.z) * scale;
-    const radius = zone.radius * scale * 2;
+
+    // Ensure minimum zone visibility with adaptive scaling
+    const baseRadius = zone.radius * scale * 2;
+    const minRadius = zone.isHomeBase ? 15 : 12; // Minimum pixel radius for visibility
+    const radius = Math.max(baseRadius, minRadius / this.zoomLevel);
 
     // Zone area
     ctx.fillStyle = this.getZoneColor(zone.state, 0.2);
@@ -425,25 +461,27 @@ export class FullMapSystem implements GameSystem {
 
     // Zone border
     ctx.strokeStyle = this.getZoneColor(zone.state, 0.8);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, 1 / this.zoomLevel);
     ctx.stroke();
 
-    // Zone icon
+    // Zone icon - scale appropriately
+    const iconSize = Math.max(zone.isHomeBase ? 12 : 8, zone.isHomeBase ? 16 / this.zoomLevel : 10 / this.zoomLevel);
     if (zone.isHomeBase) {
       ctx.fillStyle = this.getZoneColor(zone.state, 1);
-      ctx.fillRect(x - 8, y - 8, 16, 16);
+      ctx.fillRect(x - iconSize/2, y - iconSize/2, iconSize, iconSize);
     } else {
       ctx.fillStyle = this.getZoneColor(zone.state, 0.6);
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.arc(x, y, iconSize/2, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Zone name
+    // Zone name - adjust font size for readability
+    const fontSize = Math.max(10, 12 / Math.sqrt(this.zoomLevel));
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.font = 'bold 12px Courier New';
+    ctx.font = `bold ${fontSize}px Courier New`;
     ctx.textAlign = 'center';
-    ctx.fillText(zone.name, x, y - radius - 10);
+    ctx.fillText(zone.name, x, y - radius - 8);
   }
 
   private getZoneColor(state: ZoneState, alpha: number): string {

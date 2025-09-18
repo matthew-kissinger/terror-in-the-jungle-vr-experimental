@@ -73,8 +73,8 @@ export class LoadingScreen {
         /* Game Mode Selection Styles */
         .mode-selection-container {
           display: none;
-          margin-top: 30px;
-          margin-bottom: 20px;
+          margin: 0.75rem 0;
+          animation: fadeInUp 0.6s ease-out 0.3s backwards;
         }
 
         .mode-selection-container.visible {
@@ -83,92 +83,123 @@ export class LoadingScreen {
 
         .mode-cards {
           display: flex;
-          gap: 20px;
+          gap: 1rem;
           justify-content: center;
-          margin-bottom: 20px;
+          margin-bottom: 0.75rem;
+          flex-wrap: wrap;
         }
 
         .mode-card {
-          background: rgba(0, 0, 0, 0.5);
-          border: 2px solid rgba(74, 124, 78, 0.3);
-          border-radius: 10px;
-          padding: 20px;
+          background: rgba(20, 35, 50, 0.3);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(127, 180, 217, 0.2);
+          border-radius: 12px;
+          padding: 1rem;
           cursor: pointer;
-          transition: all 0.3s ease;
-          width: 250px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 240px;
+          position: relative;
+          overflow: hidden;
+          flex: 0 1 240px;
+        }
+
+        .mode-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, transparent, rgba(127, 180, 217, 0.05));
+          opacity: 0;
+          transition: opacity 0.3s;
         }
 
         .mode-card:hover {
-          border-color: rgba(74, 124, 78, 0.6);
-          background: rgba(74, 124, 78, 0.1);
-          transform: translateY(-5px);
+          border-color: var(--primary-color);
+          transform: translateY(-4px) scale(1.01);
+          box-shadow: 0 10px 30px rgba(127, 180, 217, 0.15);
+        }
+
+        .mode-card:hover::before {
+          opacity: 1;
         }
 
         .mode-card.selected {
-          border-color: #4a7c4e;
-          background: rgba(74, 124, 78, 0.2);
-          box-shadow: 0 0 20px rgba(74, 124, 78, 0.4);
+          border-color: var(--primary-color);
+          background: rgba(127, 180, 217, 0.1);
+          box-shadow: 0 0 30px rgba(127, 180, 217, 0.2);
         }
 
         .mode-card-title {
-          color: #8fbc8f;
-          font-size: 20px;
-          font-weight: bold;
-          margin-bottom: 10px;
+          color: var(--primary-color);
+          font-size: 1.1rem;
+          font-weight: 500;
+          margin-bottom: 0.25rem;
           text-transform: uppercase;
+          letter-spacing: 0.08em;
         }
 
         .mode-card-subtitle {
-          color: #708070;
-          font-size: 12px;
-          margin-bottom: 15px;
+          color: var(--text-secondary);
+          font-size: 0.7rem;
+          margin-bottom: 0.5rem;
           text-transform: uppercase;
+          letter-spacing: 0.1em;
+          opacity: 0.7;
         }
 
         .mode-card-description {
-          color: #c4b5a0;
-          font-size: 14px;
-          line-height: 1.5;
-          margin-bottom: 15px;
+          color: var(--text-secondary);
+          font-size: 0.8rem;
+          line-height: 1.4;
+          margin-bottom: 0.75rem;
         }
 
         .mode-card-features {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
+          gap: 0.5rem;
         }
 
         .mode-feature {
-          background: rgba(74, 124, 78, 0.2);
-          border: 1px solid rgba(74, 124, 78, 0.4);
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          color: #8fbc8f;
+          background: rgba(127, 180, 217, 0.15);
+          border: 1px solid rgba(127, 180, 217, 0.3);
+          padding: 0.15rem 0.5rem;
+          border-radius: 15px;
+          font-size: 0.65rem;
+          color: var(--text-primary);
+          letter-spacing: 0.03em;
         }
 
         .selected-mode-display {
           text-align: center;
-          color: #708070;
-          font-size: 14px;
-          margin-top: 10px;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          margin-top: 0.5rem;
+          letter-spacing: 0.05em;
         }
 
         .selected-mode-display strong {
-          color: #8fbc8f;
+          color: var(--primary-color);
+          font-weight: 500;
         }
       </style>
 
       <div class="loading-content">
-        <h1 class="game-title">TERROR IN THE JUNGLE</h1>
-        <div class="subtitle">US Forces vs OPFOR</div>
-
-        <div class="loading-bar">
-          <div class="progress-fill" style="width: 0%"></div>
-          <span class="percent-text">0%</span>
+        <div class="header-section">
+          <h1 class="game-title">TERROR IN THE JUNGLE</h1>
+          <div class="subtitle">US Forces vs OPFOR</div>
         </div>
 
-        <div class="phase-text">Initializing...</div>
+        <div class="loading-section">
+          <div class="loading-bar">
+            <div class="progress-fill" style="width: 0%"></div>
+            <span class="percent-text">0%</span>
+          </div>
+          <div class="phase-text">Initializing...</div>
+        </div>
 
         <div class="tip-container">
           <div class="tip-label">TIP</div>
@@ -182,7 +213,7 @@ export class LoadingScreen {
               <div class="mode-card-title">Zone Control</div>
               <div class="mode-card-subtitle">Classic</div>
               <div class="mode-card-description">
-                Fast-paced combat over 3 strategic zones. Quick 3-minute matches.
+                Strategic 3-zone combat
               </div>
               <div class="mode-card-features">
                 <div class="mode-feature">3 Zones</div>
@@ -196,7 +227,7 @@ export class LoadingScreen {
               <div class="mode-card-title">Open Frontier</div>
               <div class="mode-card-subtitle">Large Scale</div>
               <div class="mode-card-description">
-                Massive 2x2 mile battlefield with 10 zones. Epic 15-minute campaigns.
+                Massive 10-zone battlefield
               </div>
               <div class="mode-card-features">
                 <div class="mode-feature">10 Zones</div>
