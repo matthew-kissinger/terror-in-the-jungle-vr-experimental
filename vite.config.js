@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/pix3d-open-world/',
+  base: '/terror-in-the-jungle/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
