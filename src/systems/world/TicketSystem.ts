@@ -283,6 +283,15 @@ export class TicketSystem implements GameSystem {
     console.log(`🎫 Added ${amount} tickets to ${faction}`);
   }
 
+  removeTickets(faction: Faction, amount: number): void {
+    if (faction === Faction.US) {
+      this.usTickets = Math.max(0, this.usTickets - amount);
+    } else {
+      this.opforTickets = Math.max(0, this.opforTickets - amount);
+    }
+    console.log(`🎫 Removed ${amount} tickets from ${faction}. New totals: US ${this.usTickets}, OPFOR ${this.opforTickets}`);
+  }
+
   forceEndGame(winner: Faction): void {
     this.endGame(winner, 'ADMIN_COMMAND');
   }

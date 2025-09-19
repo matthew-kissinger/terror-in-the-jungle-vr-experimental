@@ -7,7 +7,7 @@ import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { MinimapSystem } from '../../ui/minimap/MinimapSystem';
 
 export class GameModeManager implements GameSystem {
-  private currentMode: GameMode = GameMode.ZONE_CONTROL;
+  public currentMode: GameMode = GameMode.ZONE_CONTROL;
   private currentConfig: GameModeConfig;
 
   // Systems to configure
@@ -66,9 +66,10 @@ export class GameModeManager implements GameSystem {
   public setGameMode(mode: GameMode): void {
     if (mode === this.currentMode) return;
 
-    console.log(`🎮 Switching game mode to: ${mode}`);
+    console.log(`🎮 GameModeManager: Switching game mode to: ${mode}`);
     this.currentMode = mode;
     this.currentConfig = getGameModeConfig(mode);
+    console.log(`🎮 GameModeManager: World size is now ${this.currentConfig.worldSize}, zones: ${this.currentConfig.zones.length}`);
 
     // Notify listeners
     if (this.onModeChange) {

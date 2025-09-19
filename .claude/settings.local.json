@@ -19,7 +19,10 @@
       "Bash(gh workflow view:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(if not exist scripts mkdir scripts)",
+      "Bash(python:*)",
+      "Bash(tsc --noEmit)"
     ],
     "deny": [],
     "ask": []

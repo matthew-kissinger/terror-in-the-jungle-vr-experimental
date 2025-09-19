@@ -14,6 +14,8 @@ export class RespawnMapView {
   // Map settings
   private readonly MAP_SIZE = 600;
   private worldSize = 3200;
+  private mapScale = 1; // Dynamic scale for different world sizes
+  private readonly BASE_WORLD_SIZE = 400; // Zone Control world size as baseline
 
   // Selection state
   private selectedZoneId?: string;
@@ -67,17 +69,26 @@ export class RespawnMapView {
   private getZoneAtPosition(canvasX: number, canvasY: number): CaptureZone | undefined {
     if (!this.zoneManager) return undefined;
 
-    const scale = this.MAP_SIZE / this.worldSize;
     const zones = this.zoneManager.getAllZones();
 
     for (const zone of zones) {
       // Convert world to canvas coordinates (flipped axes for north-up)
-      const x = (this.worldSize / 2 - zone.position.x) * scale;
-      const y = (this.worldSize / 2 - zone.position.z) * scale;
-      const radius = Math.max(zone.radius * scale * 2, 20); // Min clickable area
+      // When mapScale is applied, we need to account for it in click detection
+      const baseScale = this.MAP_SIZE / this.worldSize;
+      const x = (this.worldSize / 2 - zone.position.x) * baseScale;
+      const y = (this.worldSize / 2 - zone.position.z) * baseScale;
 
-      const dx = canvasX - x;
-      const dy = canvasY - y;
+      // Transform canvas coordinates to account for scaling
+      const centerOffset = this.MAP_SIZE / 2;
+      const scaledX = centerOffset + (x - centerOffset) * this.mapScale;
+      const scaledY = centerOffset + (y - centerOffset) * this.mapScale;
+
+      // Adjust radius for scale
+      const minRadius = this.worldSize > this.BASE_WORLD_SIZE ? 8 * this.mapScale : 15;
+      const radius = Math.max(zone.radius * baseScale * 2 * this.mapScale, minRadius);
+
+      const dx = canvasX - scaledX;
+      const dy = canvasY - scaledY;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance <= radius) {
@@ -126,6 +137,13 @@ export class RespawnMapView {
     ctx.fillStyle = '#0a0f0a';
     ctx.fillRect(0, 0, size, size);
 
+    // Apply scaling transformation
+    ctx.save();
+    const center = size / 2;
+    ctx.translate(center, center);
+    ctx.scale(this.mapScale, this.mapScale);
+    ctx.translate(-center, -center);
+
     // Draw grid
     this.drawGrid(ctx);
 
@@ -142,12 +160,15 @@ export class RespawnMapView {
         this.drawSelectionHighlight(ctx, zone);
       }
     }
+
+    // Restore transformation
+    ctx.restore();
   }
 
   private drawGrid(ctx: CanvasRenderingContext2D): void {
-    const gridSize = 50;
+    const gridSize = 50 / this.mapScale; // Adjust grid size for scale
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.05)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 / this.mapScale; // Keep lines thin at any scale
 
     for (let i = 0; i <= this.MAP_SIZE; i += gridSize) {
       ctx.beginPath();
@@ -167,7 +188,9 @@ export class RespawnMapView {
     // North-up map with flipped axes
     const x = (this.worldSize / 2 - zone.position.x) * scale;
     const y = (this.worldSize / 2 - zone.position.z) * scale;
-    const radius = Math.max(zone.radius * scale * 2, 15);
+    // Adjust radius to be visible at different scales
+    const minRadius = this.worldSize > this.BASE_WORLD_SIZE ? 8 : 15;
+    const radius = Math.max(zone.radius * scale * 2, minRadius);
 
     const isSpawnable = this.isZoneSpawnable(zone);
 
@@ -179,7 +202,7 @@ export class RespawnMapView {
 
     // Zone border
     ctx.strokeStyle = this.getZoneColor(zone, 0.8, isSpawnable);
-    ctx.lineWidth = isSpawnable ? 3 : 2;
+    ctx.lineWidth = (isSpawnable ? 3 : 2) / this.mapScale;
     ctx.stroke();
 
     // Zone icon
@@ -205,7 +228,8 @@ export class RespawnMapView {
 
     // Zone name
     ctx.fillStyle = isSpawnable ? '#00ff00' : 'rgba(255, 255, 255, 0.6)';
-    ctx.font = isSpawnable ? 'bold 11px monospace' : '10px monospace';
+    const fontSize = this.worldSize > this.BASE_WORLD_SIZE ? 12 : (isSpawnable ? 11 : 10);
+    ctx.font = isSpawnable ? `bold ${fontSize}px monospace` : `${fontSize}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText(zone.name, x, y - radius - 5);
@@ -257,8 +281,9 @@ export class RespawnMapView {
     const pulse = Math.sin(time * 3) * 0.2 + 0.8;
 
     ctx.strokeStyle = `rgba(0, 255, 0, ${pulse})`;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 4 / this.mapScale;
+    const dashSize = 5 / this.mapScale;
+    ctx.setLineDash([dashSize, dashSize]);
     ctx.lineDashOffset = time * 10;
 
     ctx.beginPath();
@@ -282,8 +307,37 @@ export class RespawnMapView {
     this.gameModeManager = manager;
     if (manager) {
       this.worldSize = manager.getWorldSize();
+      console.log(`📐 RespawnMapView: Setting world size to ${this.worldSize}`);
+      this.updateMapScale();
+      console.log(`📐 RespawnMapView: Map scale set to ${this.mapScale}`);
     }
     this.updateSpawnableZones();
+    this.render(); // Re-render with new scale
+  }
+
+  private updateMapScale(): void {
+    // Calculate optimal scale to show entire world
+    // For Zone Control (400 units), we want default scale
+    // For Open Frontier (3200 units), we need to zoom out significantly
+
+    if (this.worldSize <= this.BASE_WORLD_SIZE) {
+      // Zone Control or smaller - use default scale
+      this.mapScale = 1.0;
+    } else {
+      // For Open Frontier (3200 units vs 400 base), we need 1/8 scale
+      // But we want a bit of padding, so use 0.85 of full canvas
+      const scaleFactor = this.BASE_WORLD_SIZE / this.worldSize;
+
+      // Apply an additional zoom out factor to ensure all zones are visible
+      const paddingFactor = 0.85;
+
+      this.mapScale = scaleFactor * paddingFactor;
+
+      // For Open Frontier specifically, ensure we're zoomed out enough
+      if (this.worldSize >= 3200) {
+        this.mapScale = Math.min(this.mapScale, 0.15); // Cap at 0.15 for very large worlds
+      }
+    }
   }
 
   setZoneSelectedCallback(callback: (zoneId: string, zoneName: string) => void): void {

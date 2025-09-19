@@ -35,6 +35,16 @@ export class HUDSystem implements GameSystem {
     // Initialize ticket display
     this.updater.updateTicketDisplay(300, 300);
 
+    // Setup respawn button click handler
+    if (this.elements.respawnButton) {
+      this.elements.respawnButton.onclick = () => {
+        if (this.playerHealthSystem && this.playerHealthSystem.isAlive()) {
+          console.log('🔄 Respawn button clicked');
+          this.playerHealthSystem.voluntaryRespawn();
+        }
+      };
+    }
+
     console.log('✅ HUD System initialized');
   }
 

@@ -262,6 +262,12 @@ export class CombatantCombat {
     attacker?: Combatant,
     squads?: Map<string, Squad>
   ): void {
+    // Check if target is valid before accessing properties
+    if (!target) {
+      console.warn('⚠️ applyDamage called with undefined target');
+      return;
+    }
+
     if ((target as any).isPlayerProxy) {
       if (this.playerHealthSystem) {
         const killed = this.playerHealthSystem.takeDamage(

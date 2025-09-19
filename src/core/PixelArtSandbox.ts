@@ -46,6 +46,15 @@ export class PixelArtSandbox {
         this.adjustPixelSize(-1);
       } else if (event.key === ']') {
         this.adjustPixelSize(1);
+      } else if (event.key === 'k' || event.key === 'K') {
+        // Voluntary respawn with K key
+        if (this.gameStarted) {
+          const healthSystem = (this.systemManager as any).playerHealthSystem;
+          if (healthSystem && healthSystem.isAlive()) {
+            console.log('🔄 Initiating voluntary respawn (K pressed)');
+            healthSystem.voluntaryRespawn();
+          }
+        }
       }
     });
   }
@@ -119,10 +128,11 @@ export class PixelArtSandbox {
   private startGameWithMode(mode: GameMode): void {
     if (!this.isInitialized || this.gameStarted) return;
 
-    console.log(`🎮 Starting game with mode: ${mode}`);
+    console.log(`🎮 PixelArtSandbox: Starting game with mode: ${mode} (${mode === GameMode.OPEN_FRONTIER ? 'OPEN_FRONTIER' : 'ZONE_CONTROL'})`);
     this.gameStarted = true;
 
     // Set the game mode in the system manager
+    console.log(`🎮 PixelArtSandbox: Calling systemManager.setGameMode(${mode})`);
     this.systemManager.setGameMode(mode);
 
     this.startGame();

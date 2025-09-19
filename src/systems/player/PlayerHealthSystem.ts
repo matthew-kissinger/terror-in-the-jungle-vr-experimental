@@ -182,6 +182,25 @@ export class PlayerHealthSystem implements GameSystem {
     this.effects.stopHeartbeat();
   }
 
+  // Voluntary respawn - kills player to allow respawning at different location
+  voluntaryRespawn(): void {
+    if (this.playerState.isDead) return;
+
+    console.log('🔄 Player initiated voluntary respawn');
+
+    // Kill the player by setting health to 0
+    this.playerState.health = 0;
+    this.updateHealthDisplay();
+
+    // Trigger death sequence
+    this.onPlayerDeath();
+
+    // Apply ticket penalty for voluntary respawn
+    if (this.ticketSystem) {
+      this.ticketSystem.removeTickets(Faction.US, 1); // Extra penalty for voluntary respawn
+    }
+  }
+
   // Getters
 
   getHealth(): number {

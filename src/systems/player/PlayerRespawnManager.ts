@@ -5,6 +5,8 @@ import { ZoneManager, ZoneState } from '../world/ZoneManager';
 import { PlayerHealthSystem } from './PlayerHealthSystem';
 import { GameModeManager } from '../world/GameModeManager';
 import { RespawnMapView } from '../../ui/map/RespawnMapView';
+import { OpenFrontierRespawnMap } from '../../ui/map/OpenFrontierRespawnMap';
+import { GameMode } from '../../config/gameModes';
 
 export class PlayerRespawnManager implements GameSystem {
   private scene: THREE.Scene;
@@ -22,6 +24,8 @@ export class PlayerRespawnManager implements GameSystem {
   private respawnUIContainer?: HTMLDivElement;
   private availableSpawnPoints: Array<{ id: string; name: string; position: THREE.Vector3; safe: boolean }> = [];
   private respawnMapView: RespawnMapView;
+  private openFrontierRespawnMap: OpenFrontierRespawnMap;
+  private currentGameMode: GameMode = GameMode.ZONE_CONTROL;
 
   private onRespawnCallback?: (position: THREE.Vector3) => void;
   private onDeathCallback?: () => void;
@@ -30,6 +34,7 @@ export class PlayerRespawnManager implements GameSystem {
     this.scene = scene;
     this.camera = camera;
     this.respawnMapView = new RespawnMapView();
+    this.openFrontierRespawnMap = new OpenFrontierRespawnMap();
   }
 
   async init(): Promise<void> {
@@ -141,19 +146,14 @@ export class PlayerRespawnManager implements GameSystem {
       justify-content: center;
     `;
 
-    // Add the map canvas
-    const mapCanvas = this.respawnMapView.getCanvas();
-    mapCanvas.style.cssText = `
-      width: 100%;
-      height: 100%;
-      max-width: 600px;
-      max-height: 600px;
-    `;
-    mapContainer.appendChild(mapCanvas);
     mapPanel.appendChild(mapContainer);
 
-    // Set up map selection callback
+    // Set up map selection callbacks for both maps
     this.respawnMapView.setZoneSelectedCallback((zoneId: string, zoneName: string) => {
+      this.selectSpawnPointOnMap(zoneId, zoneName);
+    });
+
+    this.openFrontierRespawnMap.setZoneSelectedCallback((zoneId: string, zoneName: string) => {
       this.selectSpawnPointOnMap(zoneId, zoneName);
     });
 
@@ -360,6 +360,7 @@ export class PlayerRespawnManager implements GameSystem {
   setZoneManager(manager: ZoneManager): void {
     this.zoneManager = manager;
     this.respawnMapView.setZoneManager(manager);
+    this.openFrontierRespawnMap.setZoneManager(manager);
   }
 
   setPlayerHealthSystem(system: PlayerHealthSystem): void {
@@ -368,7 +369,18 @@ export class PlayerRespawnManager implements GameSystem {
 
   setGameModeManager(manager: GameModeManager): void {
     this.gameModeManager = manager;
+
+    // Determine current game mode based on the actual mode
+    if (manager) {
+      // Now currentMode is public
+      this.currentGameMode = manager.currentMode;
+      const worldSize = manager.getWorldSize();
+      console.log(`🗺️ PlayerRespawnManager: Game mode detected as ${this.currentGameMode} (world size: ${worldSize})`);
+    }
+
+    // Configure both maps
     this.respawnMapView.setGameModeManager(manager);
+    this.openFrontierRespawnMap.setGameModeManager(manager);
   }
 
   setPlayerController(controller: any): void {
@@ -484,6 +496,13 @@ export class PlayerRespawnManager implements GameSystem {
   onPlayerDeath(): void {
     console.log('💀 Player eliminated!');
 
+    // Re-check game mode when player dies in case it changed
+    if (this.gameModeManager) {
+      this.currentGameMode = this.gameModeManager.currentMode;
+      const worldSize = this.gameModeManager.getWorldSize();
+      console.log(`🗺️ Death screen: Current game mode is ${this.currentGameMode}, world size: ${worldSize}`);
+    }
+
     // Disable player controls
     if (this.playerController && typeof this.playerController.disableControls === 'function') {
       this.playerController.disableControls();
@@ -518,10 +537,47 @@ export class PlayerRespawnManager implements GameSystem {
     // Show the UI
     this.respawnUIContainer.style.display = 'flex';
 
-    // Clear previous selection and update map
-    this.respawnMapView.clearSelection();
-    this.respawnMapView.updateSpawnableZones();
-    this.respawnMapView.render();
+    // Swap map canvas based on game mode
+    const mapContainer = document.getElementById('respawn-map');
+    if (mapContainer) {
+      // Clear container
+      mapContainer.innerHTML = '';
+
+      // Add appropriate map canvas
+      const isOpenFrontier = this.currentGameMode === GameMode.OPEN_FRONTIER;
+      console.log(`🗺️ Showing respawn map for mode: ${this.currentGameMode}, isOpenFrontier: ${isOpenFrontier}`);
+
+      const activeMap = isOpenFrontier ? this.openFrontierRespawnMap : this.respawnMapView;
+      const mapCanvas = activeMap.getCanvas();
+
+      console.log(`🗺️ Using map: ${isOpenFrontier ? 'OpenFrontierRespawnMap' : 'RespawnMapView'}`);
+
+      // Set canvas style
+      mapCanvas.style.cssText = isOpenFrontier ? `
+        width: 100%;
+        height: 100%;
+        max-width: 800px;
+        max-height: 800px;
+      ` : `
+        width: 100%;
+        height: 100%;
+        max-width: 600px;
+        max-height: 600px;
+      `;
+
+      mapContainer.appendChild(mapCanvas);
+
+      // Clear previous selection and update map
+      activeMap.clearSelection();
+      activeMap.updateSpawnableZones();
+      activeMap.render();
+
+      // Reset view for Open Frontier map
+      if (isOpenFrontier) {
+        this.openFrontierRespawnMap.resetView();
+      }
+    }
+
     this.selectedSpawnPoint = undefined;
 
     // Reset selected spawn info
