@@ -11,6 +11,7 @@ export class HUDSystem implements GameSystem {
   private combatantSystem?: CombatantSystem;
   private zoneManager?: ZoneManager;
   private ticketSystem?: TicketSystem;
+  private playerHealthSystem?: any;
 
   private styles: HUDStyles;
   private elements: HUDElements;
@@ -20,6 +21,7 @@ export class HUDSystem implements GameSystem {
     this.styles = HUDStyles.getInstance();
     this.elements = new HUDElements();
     this.updater = new HUDUpdater(this.elements);
+    this.playerHealthSystem = playerHealthSystem;
     // Parameters are optional for backward compatibility
   }
 
