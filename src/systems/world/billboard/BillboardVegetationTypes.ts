@@ -15,10 +15,6 @@ export interface VegetationMeshes {
   // Giant canopy trees
   dipterocarpInstances?: THREE.InstancedMesh;
   banyanInstances?: THREE.InstancedMesh;
-
-  // Legacy compatibility
-  grassInstances?: THREE.InstancedMesh;
-  treeInstances?: THREE.InstancedMesh;
 }
 
 export interface VegetationConfig {
@@ -29,8 +25,6 @@ export interface VegetationConfig {
   readonly maxArecaInstances: number;
   readonly maxDipterocarpInstances: number;
   readonly maxBanyanInstances: number;
-  readonly maxGrassInstances: number;
-  readonly maxTreeInstances: number;
 }
 
 export class BillboardVegetationTypes {
@@ -39,15 +33,13 @@ export class BillboardVegetationTypes {
   private meshes: VegetationMeshes = {};
 
   private readonly config: VegetationConfig = {
-    maxFernInstances: 80000,
-    maxElephantEarInstances: 15000,
-    maxFanPalmInstances: 10000,
-    maxCoconutInstances: 8000,
-    maxArecaInstances: 15000,
-    maxDipterocarpInstances: 3000,
-    maxBanyanInstances: 3000,
-    maxGrassInstances: 10000,
-    maxTreeInstances: 5000
+    maxFernInstances: 80000,        // Original working value
+    maxElephantEarInstances: 15000, // Original working value
+    maxFanPalmInstances: 10000,     // Original working value
+    maxCoconutInstances: 8000,      // Original working value
+    maxArecaInstances: 15000,       // Original working value
+    maxDipterocarpInstances: 3000,  // Original working value
+    maxBanyanInstances: 3000        // Original working value
   };
 
   constructor(scene: THREE.Scene, assetLoader: AssetLoader) {
@@ -59,7 +51,6 @@ export class BillboardVegetationTypes {
     console.log('🌴 Initializing Terror in the Jungle Billboard System...');
 
     await this.initializeJungleFoliage();
-    await this.initializeLegacyMeshes();
 
     console.log(`✅ Jungle Billboard System ready with all tropical foliage types`);
     return this.meshes;
@@ -96,34 +87,6 @@ export class BillboardVegetationTypes {
     this.meshes.banyanInstances = await this.createCanopyTreeMesh(
       'TwisterBanyan', 'banyan', this.config.maxBanyanInstances, 14, 18
     );
-  }
-
-  private async initializeLegacyMeshes(): Promise<void> {
-    // Legacy grass mesh
-    const grassTexture = this.assetLoader.getTexture('Fern');
-    if (grassTexture) {
-      const geometry = new THREE.PlaneGeometry(2.5, 2.5);
-      const material = PixelPerfectUtils.createPixelPerfectMaterial(grassTexture, true);
-
-      this.meshes.grassInstances = new THREE.InstancedMesh(
-        geometry, material, this.config.maxGrassInstances
-      );
-      this.setupInstancedMesh(this.meshes.grassInstances, 'global_grass', false);
-      console.log(`🌿 Jungle undergrowth mesh created: ${this.config.maxGrassInstances} max instances`);
-    }
-
-    // Legacy tree mesh
-    const treeTexture = this.assetLoader.getTexture('CoconutPalm');
-    if (treeTexture) {
-      const geometry = new THREE.PlaneGeometry(8, 12);
-      const material = PixelPerfectUtils.createPixelPerfectMaterial(treeTexture, true);
-
-      this.meshes.treeInstances = new THREE.InstancedMesh(
-        geometry, material, this.config.maxTreeInstances
-      );
-      this.setupInstancedMesh(this.meshes.treeInstances, 'global_trees', true);
-      console.log(`🌴 Jungle palm tree mesh created: ${this.config.maxTreeInstances} max instances`);
-    }
   }
 
   private async createCanopyTreeMesh(

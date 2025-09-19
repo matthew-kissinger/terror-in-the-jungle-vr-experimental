@@ -8,7 +8,7 @@ export interface ChunkInstances {
   instances: BillboardInstance[];
 }
 
-export type VegetationType = 'grass' | 'tree' | 'fern' | 'elephantEar' | 'fanPalm' |
+export type VegetationType = 'fern' | 'elephantEar' | 'fanPalm' |
                              'coconut' | 'areca' | 'dipterocarp' | 'banyan';
 
 export class BillboardInstanceManager {
@@ -23,9 +23,7 @@ export class BillboardInstanceManager {
     ['areca', 0],
     ['fern', 0],
     ['fanPalm', 0],
-    ['elephantEar', 0],
-    ['grass', 0],
-    ['tree', 0]
+    ['elephantEar', 0]
   ]);
 
   private freeSlots: Map<VegetationType, number[]> = new Map([
@@ -35,21 +33,17 @@ export class BillboardInstanceManager {
     ['areca', []],
     ['fern', []],
     ['fanPalm', []],
-    ['elephantEar', []],
-    ['grass', []],
-    ['tree', []]
+    ['elephantEar', []]
   ]);
 
   private readonly maxInstances: Map<VegetationType, number> = new Map([
-    ['fern', 80000],
-    ['elephantEar', 15000],
-    ['fanPalm', 10000],
-    ['coconut', 8000],
-    ['areca', 15000],
-    ['dipterocarp', 3000],
-    ['banyan', 3000],
-    ['grass', 10000],
-    ['tree', 5000]
+    ['fern', 80000],        // Original working value
+    ['elephantEar', 15000], // Original working value
+    ['fanPalm', 10000],     // Original working value
+    ['coconut', 8000],      // Original working value
+    ['areca', 15000],       // Original working value
+    ['dipterocarp', 3000],  // Original working value
+    ['banyan', 3000]        // Original working value
   ]);
 
   constructor(meshes: VegetationMeshes) {
@@ -58,8 +52,6 @@ export class BillboardInstanceManager {
 
   addChunkInstances(
     chunkKey: string,
-    grassInstances: BillboardInstance[],
-    treeInstances: BillboardInstance[],
     fernInstances?: BillboardInstance[],
     elephantEarInstances?: BillboardInstance[],
     fanPalmInstances?: BillboardInstance[],
@@ -76,8 +68,6 @@ export class BillboardInstanceManager {
 
     // Process each vegetation type
     const instanceSets: [VegetationType, BillboardInstance[] | undefined][] = [
-      ['grass', grassInstances],
-      ['tree', treeInstances],
       ['fern', fernInstances],
       ['elephantEar', elephantEarInstances],
       ['fanPalm', fanPalmInstances],
@@ -107,11 +97,20 @@ export class BillboardInstanceManager {
     const chunkData = this.chunkInstances.get(chunkKey);
     if (!chunkData) return;
 
+    // Properly deallocate all instances for this chunk
     chunkData.forEach((allocation, type) => {
       this.deallocateInstances(allocation, type as VegetationType);
     });
 
     this.chunkInstances.delete(chunkKey);
+
+    // Compact free slots after removal to prevent fragmentation
+    for (const type of this.allocationIndices.keys()) {
+      if (this.freeSlots.get(type)!.length > 100) { // Only compact if significant fragmentation
+        this.compactFreeSlots(type);
+      }
+    }
+
     console.log(`🗑️ Removed instances for chunk ${chunkKey}`);
   }
 
@@ -136,12 +135,20 @@ export class BillboardInstanceManager {
     } else {
       // Check if we have enough space at the end
       if (allocationIndex + requiredSlots > maxInstances) {
-        console.warn(`⚠️ Not enough ${type} instances available: need ${requiredSlots}, have ${maxInstances - allocationIndex}`);
-        return null;
-      }
+        console.warn(`⚠️ Not enough ${type} instances available: need ${requiredSlots}, have ${maxInstances - allocationIndex} (max: ${maxInstances})`);
+        // Try to compact free slots first
+        this.compactFreeSlots(type);
+        const compactedIndex = this.allocationIndices.get(type)!;
+        if (compactedIndex + requiredSlots > maxInstances) {
+          return null;
+        }
+        startIndex = compactedIndex;
+        this.allocationIndices.set(type, compactedIndex + requiredSlots);
+      } else {
 
-      startIndex = allocationIndex;
-      this.allocationIndices.set(type, allocationIndex + requiredSlots);
+        startIndex = allocationIndex;
+        this.allocationIndices.set(type, allocationIndex + requiredSlots);
+      }
     }
 
     // Update visible count
@@ -200,8 +207,6 @@ export class BillboardInstanceManager {
 
   getMeshForType(type: VegetationType): THREE.InstancedMesh | undefined {
     switch (type) {
-      case 'grass': return this.meshes.grassInstances;
-      case 'tree': return this.meshes.treeInstances;
       case 'fern': return this.meshes.fernInstances;
       case 'elephantEar': return this.meshes.elephantEarInstances;
       case 'fanPalm': return this.meshes.fanPalmInstances;
@@ -229,9 +234,30 @@ export class BillboardInstanceManager {
 
     for (const [type, index] of this.allocationIndices) {
       const freeCount = this.freeSlots.get(type)?.length || 0;
+      const maxCount = this.maxInstances.get(type) || 0;
       info[`${type}Used`] = index - freeCount;
+      info[`${type}Max`] = maxCount;
+      info[`${type}Free`] = freeCount;
     }
 
     return info;
+  }
+
+  private compactFreeSlots(type: VegetationType): void {
+    const freeSlots = this.freeSlots.get(type)!;
+    if (freeSlots.length === 0) return;
+
+    console.log(`🔧 Compacting ${type}: ${freeSlots.length} free slots`);
+
+    // Reset allocation to 0 and clear free slots
+    // This forces new allocations to start from the beginning
+    this.allocationIndices.set(type, 0);
+    freeSlots.length = 0;
+
+    // Reset the instance mesh count
+    const instanceMesh = this.getMeshForType(type);
+    if (instanceMesh) {
+      instanceMesh.count = 0;
+    }
   }
 }

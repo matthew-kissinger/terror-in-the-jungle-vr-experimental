@@ -54,8 +54,8 @@ export class ImprovedChunkManager implements GameSystem {
     globalBillboardSystem: GlobalBillboardSystem,
     config: ChunkConfig = {
       size: 64,
-      renderDistance: 8,  // Increased render distance to prevent pop-in
-      loadDistance: 10,   // Load more chunks to prevent unloading visible areas
+      renderDistance: 6,  // Visible chunks
+      loadDistance: 7,     // Load 1 extra ring beyond visible
       lodLevels: 4        // More LOD levels for gradual quality reduction
     }
   ) {
@@ -69,10 +69,11 @@ export class ImprovedChunkManager implements GameSystem {
 
   async init(): Promise<void> {
     console.log('🗺️ Improved ChunkManager: Initializing...');
-    console.log(`Config: ${this.config.renderDistance}x${this.config.renderDistance} render, ${this.config.size}x${this.config.size} chunk size`);
+    const maxChunks = (this.config.loadDistance * 2 + 1) ** 2;
+    console.log(`Config: render=${this.config.renderDistance}, load=${this.config.loadDistance}, max chunks=${maxChunks}, chunk size=${this.config.size}`);
     
-    // Start with larger immediate area for better initial view
-    const initialChunks = this.getChunksInRadius(new THREE.Vector3(0, 0, 0), 2);
+    // Start with smaller immediate area to reduce initial load
+    const initialChunks = this.getChunksInRadius(new THREE.Vector3(0, 0, 0), 1);
     
     // Load initial chunks synchronously for immediate playability
     for (const {x, z} of initialChunks) {
@@ -242,9 +243,9 @@ export class ImprovedChunkManager implements GameSystem {
         );
 
         await chunk.generate();
-        
-        // Only add if still needed (player might have moved away)
         const currentDistance = this.getChunkDistanceFromPlayer(chunkX, chunkZ);
+
+        // Only add if still needed (player might have moved away)
         if (currentDistance <= this.config.loadDistance) {
           this.chunks.set(chunkKey, chunk);
           console.log(`📦 Async loaded chunk (${chunkX}, ${chunkZ})`);
@@ -267,8 +268,8 @@ export class ImprovedChunkManager implements GameSystem {
       const [x, z] = key.split(',').map(Number);
       const distance = this.getChunkDistanceFromPlayer(x, z);
       
-      // Add buffer to prevent unloading visible chunks
-      if (distance > this.config.loadDistance + 2) {
+      // Unload chunks beyond load distance
+      if (distance > this.config.loadDistance + 1) {
         chunksToUnload.push(key);
       }
     });
@@ -279,7 +280,7 @@ export class ImprovedChunkManager implements GameSystem {
         this.globalBillboardSystem.removeChunkInstances(key);
         chunk.dispose();
         this.chunks.delete(key);
-        console.log(`🗑️ Unloaded distant chunk ${key}`);
+        console.log(`🗑️ Unloaded chunk ${key} (${this.chunks.size - 1} chunks remain)`);
       }
     });
   }
@@ -315,11 +316,11 @@ export class ImprovedChunkManager implements GameSystem {
   }
 
   private calculateLOD(distance: number): number {
-    // More aggressive LOD for better performance
-    if (distance <= 1) return 0;      // Full detail for immediate area
-    if (distance <= 2) return 1;      // High detail for close chunks
-    if (distance <= 4) return 2;      // Medium detail for mid-range
-    return 3;                         // Low detail for far chunks
+    // Balanced LOD for performance while maintaining visual quality
+    if (distance <= 3) return 0;      // Full detail for nearby chunks (radius 3)
+    if (distance <= 5) return 1;      // 50% detail for medium range
+    if (distance <= 7) return 2;      // 25% detail for far chunks
+    return 3;                         // 10% detail for very far chunks
   }
 
   private getChunkDistance(chunkWorldPos: THREE.Vector3, playerPos: THREE.Vector3): number {
@@ -407,7 +408,7 @@ export class ImprovedChunkManager implements GameSystem {
   // Game mode configuration
   setRenderDistance(distance: number): void {
     this.config.renderDistance = distance;
-    this.config.loadDistance = distance + 2;
+    this.config.loadDistance = distance + 1;
     console.log(`🎮 Chunk render distance set to ${distance}`);
     // Trigger chunk reload
     this.updateLoadQueue();

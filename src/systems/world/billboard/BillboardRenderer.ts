@@ -52,7 +52,7 @@ export class BillboardRenderer {
 
       // Update all vegetation types
       const vegetationTypes: VegetationType[] = [
-        'grass', 'tree', 'fern', 'elephantEar', 'fanPalm',
+        'fern', 'elephantEar', 'fanPalm',
         'coconut', 'areca', 'dipterocarp', 'banyan'
       ];
 

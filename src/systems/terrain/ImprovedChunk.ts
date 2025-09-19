@@ -37,9 +37,6 @@ export class ImprovedChunk {
   // Canopy giants
   private dipterocarpInstances: BillboardInstance[] = [];   // Rare huge
   private banyanInstances: BillboardInstance[] = [];        // Rare huge
-  // Legacy compatibility
-  private grassInstances: BillboardInstance[] = [];
-  private treeInstances: BillboardInstance[] = [];
   
   // Generation
   private noiseGenerator: NoiseGenerator;
@@ -72,13 +69,13 @@ export class ImprovedChunk {
 
   async generate(): Promise<void> {
     if (this.isGenerated) return;
-    
+
     // Generate height data first
     this.generateHeightData();
-    
+
     // Create terrain mesh with proper vertex order
     await this.createTerrainMesh();
-    
+
     // Generate vegetation positioned on terrain
     await this.generateVegetation();
     
@@ -86,8 +83,6 @@ export class ImprovedChunk {
     const chunkKey = `${this.chunkX},${this.chunkZ}`;
     this.globalBillboardSystem.addChunkInstances(
       chunkKey,
-      [], // legacy grass not used; using specific undergrowth types instead
-      [], // legacy trees not used; using jungle tree types instead
       this.fernInstances,
       this.elephantEarInstances,
       this.fanPalmInstances,
@@ -255,10 +250,10 @@ export class ImprovedChunk {
     const baseZ = this.chunkZ * this.size;
 
     // Fixed density calculations - tuned for performance across many chunks
-    const DENSITY_PER_UNIT = 1.0 / 64.0; // Base density: 1 item per 64 square units
+    const DENSITY_PER_UNIT = 1.0 / 128.0; // Reduced base density: 1 item per 128 square units
 
     // LAYER 1: Dense fern ground cover (covers most areas)
-    const fernCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 8.0);
+    const fernCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 6.0); // Reduced multiplier
     for (let i = 0; i < fernCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -271,12 +266,12 @@ export class ImprovedChunk {
           MathUtils.randomInRange(0.8, 1.2),
           1
         ),
-        rotation: Math.random() * Math.PI * 2
+        rotation: 0 // Billboards always face camera, no rotation needed
       });
     }
     
     // LAYER 1B: Elephant ear plants sprinkled in
-    const elephantEarCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 1.2);
+    const elephantEarCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.8); // Reduced
     for (let i = 0; i < elephantEarCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -289,12 +284,12 @@ export class ImprovedChunk {
           MathUtils.randomInRange(1.0, 1.5),
           1
         ),
-        rotation: Math.random() * Math.PI * 2
+        rotation: 0 // Billboards always face camera, no rotation needed
       });
     }
     
     // LAYER 2: Fan Palm Clusters - varied elevation, especially slopes
-    const fanPalmCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.8);
+    const fanPalmCount = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.5); // Reduced
     for (let i = 0; i < fanPalmCount; i++) {
       const localX = Math.random() * this.size;
       const localZ = Math.random() * this.size;
@@ -307,19 +302,19 @@ export class ImprovedChunk {
           MathUtils.randomInRange(0.8, 1.2),
           1
         ),
-        rotation: Math.random() * Math.PI * 2
+        rotation: 0 // Billboards always face camera, no rotation needed
       });
     }
     
-    // LAYER 2B: Coconut Palms - prefer lower elevations/water edges
+    // LAYER 2B: Coconut Palms - common throughout
     const coconutPoints = MathUtils.poissonDiskSampling(this.size, this.size, 12);
-    const maxCoconuts = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.5);
+    const maxCoconuts = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.3); // Reduced
     for (let i = 0; i < Math.min(coconutPoints.length * 0.5, maxCoconuts); i++) {
       const point = coconutPoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
       
-      // Prefer lower elevations
-      if (height < 10 || Math.random() < 0.3) {
+      // Coconuts are common throughout
+      if (Math.random() < 0.8) { // 80% chance instead of elevation-based
         this.coconutInstances.push({
           position: new THREE.Vector3(baseX + point.x, height + 2.0, baseZ + point.y),
           scale: new THREE.Vector3(
@@ -327,14 +322,14 @@ export class ImprovedChunk {
             MathUtils.randomInRange(0.9, 1.1),
             1
           ),
-          rotation: Math.random() * Math.PI * 2
+          rotation: 0 // Billboards always face camera, no rotation needed
         });
       }
     }
     
     // LAYER 3: Areca Palm Clusters - everywhere as mid-size
     const arecaPoints = MathUtils.poissonDiskSampling(this.size, this.size, 8);
-    const maxAreca = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.6);
+    const maxAreca = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.4); // Reduced
     for (let i = 0; i < Math.min(arecaPoints.length * 0.8, maxAreca); i++) {
       const point = arecaPoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
@@ -346,13 +341,13 @@ export class ImprovedChunk {
           MathUtils.randomInRange(0.8, 1.0),
           1
         ),
-        rotation: Math.random() * Math.PI * 2
+        rotation: 0 // Billboards always face camera, no rotation needed
       });
     }
     
-    // LAYER 4: Giant Canopy Trees - Common but spaced out
-    const giantTreePoints = MathUtils.poissonDiskSampling(this.size, this.size, 20);
-    const maxGiantTrees = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.15);
+    // LAYER 4: Giant Canopy Trees - Common throughout jungle
+    const giantTreePoints = MathUtils.poissonDiskSampling(this.size, this.size, 16);
+    const maxGiantTrees = Math.floor(this.size * this.size * DENSITY_PER_UNIT * 0.15); // Reduced
     for (let i = 0; i < Math.min(giantTreePoints.length, maxGiantTrees); i++) {
       const point = giantTreePoints[i];
       const height = this.getHeightAtLocal(point.x, point.y);
@@ -366,7 +361,7 @@ export class ImprovedChunk {
             MathUtils.randomInRange(0.9, 1.1),
             1
           ),
-          rotation: Math.random() * Math.PI * 2
+          rotation: 0 // Billboards always face camera, no rotation needed
         });
       } else {
         this.banyanInstances.push({
@@ -376,12 +371,10 @@ export class ImprovedChunk {
             MathUtils.randomInRange(0.9, 1.1),
             1
           ),
-          rotation: Math.random() * Math.PI * 2
+          rotation: 0 // Billboards always face camera, no rotation needed
         });
       }
     }
-    
-    // No legacy combination; we pass specific layers directly to the global system
   }
 
   /**

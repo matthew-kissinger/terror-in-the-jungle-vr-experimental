@@ -213,8 +213,8 @@ export class PixelArtSandbox {
     console.log(`FPS: ${Math.round(1 / this.clock.getDelta())}`);
     console.log(`Draw calls: ${perfStats.drawCalls}`);
     console.log(`Triangles: ${perfStats.triangles}`);
-    console.log(`Grass instances: ${debugInfo.grassUsed}/${this.systemManager.globalBillboardSystem.getInstanceCount('grass')}`);
-    console.log(`Tree instances: ${debugInfo.treeUsed}/${this.systemManager.globalBillboardSystem.getInstanceCount('tree')}`);
+    console.log(`Fern instances: ${debugInfo.fernUsed || 0}/${this.systemManager.globalBillboardSystem.getInstanceCount('fern')}`);
+    console.log(`Palm instances: ${debugInfo.coconutUsed || 0}/${this.systemManager.globalBillboardSystem.getInstanceCount('coconut')}`);
     console.log(`Combatants - US: ${combatStats.us}, OPFOR: ${combatStats.opfor}`);
     console.log(`Chunks loaded: ${this.systemManager.chunkManager.getLoadedChunkCount()}, ` +
                 `Queue: ${this.systemManager.chunkManager.getQueueSize()}, ` +

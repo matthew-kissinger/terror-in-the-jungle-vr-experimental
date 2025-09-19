@@ -22,7 +22,11 @@
       "Bash(gh api:*)",
       "Bash(if not exist scripts mkdir scripts)",
       "Bash(python:*)",
-      "Bash(tsc --noEmit)"
+      "Bash(tsc --noEmit)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//c/tmp/**)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
