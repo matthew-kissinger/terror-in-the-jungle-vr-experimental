@@ -262,8 +262,8 @@ export class ImprovedChunk {
       this.fernInstances.push({
         position: new THREE.Vector3(baseX + localX, height + 0.2, baseZ + localZ),
         scale: new THREE.Vector3(
-          MathUtils.randomInRange(0.8, 1.2),
-          MathUtils.randomInRange(0.8, 1.2),
+          MathUtils.randomInRange(2.4, 3.6),
+          MathUtils.randomInRange(2.4, 3.6),
           1
         ),
         rotation: 0 // Billboards always face camera, no rotation needed
@@ -278,7 +278,7 @@ export class ImprovedChunk {
       const height = this.getHeightAtLocal(localX, localZ);
       
       this.elephantEarInstances.push({
-        position: new THREE.Vector3(baseX + localX, height + 0.2, baseZ + localZ),
+        position: new THREE.Vector3(baseX + localX, height + 0.8, baseZ + localZ),
         scale: new THREE.Vector3(
           MathUtils.randomInRange(1.0, 1.5),
           MathUtils.randomInRange(1.0, 1.5),

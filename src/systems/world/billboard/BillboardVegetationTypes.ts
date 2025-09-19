@@ -59,7 +59,7 @@ export class BillboardVegetationTypes {
   private async initializeJungleFoliage(): Promise<void> {
     // Ground cover
     this.meshes.fernInstances = await this.createUndergrowthMesh(
-      'Fern', 'fern', this.config.maxFernInstances, 1.5, 2.0
+      'Fern', 'fern', this.config.maxFernInstances, 4.5, 6.0
     );
 
     this.meshes.elephantEarInstances = await this.createUndergrowthMesh(
