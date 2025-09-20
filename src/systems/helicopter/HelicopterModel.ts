@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GameSystem } from '../../types';
 import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { HelipadSystem } from './HelipadSystem';
+import { HelicopterPhysics, HelicopterControls } from './HelicopterPhysics';
 
 export class HelicopterModel implements GameSystem {
   private scene: THREE.Scene;
@@ -10,8 +11,14 @@ export class HelicopterModel implements GameSystem {
   private playerController?: any;
   private hudSystem?: any;
   private helicopters: Map<string, THREE.Group> = new Map();
+  private helicopterPhysics: Map<string, HelicopterPhysics> = new Map();
   private interactionRadius = 5.0; // Distance from helicopter to show prompt (around helicopter size)
   private isPlayerNearHelicopter = false;
+
+  // Animation state
+  private mainRotorSpeed: Map<string, number> = new Map();
+  private tailRotorSpeed: Map<string, number> = new Map();
+  private rotorAcceleration = 5.0; // How fast rotors spin up/down
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -68,6 +75,14 @@ export class HelicopterModel implements GameSystem {
 
     this.scene.add(helicopter);
     this.helicopters.set('us_huey', helicopter);
+
+    // Initialize physics for this helicopter
+    const physics = new HelicopterPhysics(helicopterPosition);
+    this.helicopterPhysics.set('us_huey', physics);
+
+    // Initialize rotor speeds
+    this.mainRotorSpeed.set('us_huey', 0);
+    this.tailRotorSpeed.set('us_huey', 0);
 
     // Register helicopter for collision detection
     if ('registerCollisionObject' in this.terrainManager) {
@@ -553,10 +568,14 @@ export class HelicopterModel implements GameSystem {
       }
     }
 
+    // Update helicopter physics and animations
+    this.updateHelicopterPhysics(deltaTime);
+
+    // Update rotor animations
+    this.updateRotorAnimations(deltaTime);
+
     // Check player proximity to helicopter for interaction prompt
     this.checkPlayerProximity();
-
-    // Future: Add rotor animation here
   }
 
   private checkPlayerProximity(): void {
@@ -699,6 +718,107 @@ export class HelicopterModel implements GameSystem {
     this.playerController.exitHelicopter(exitPosition);
   }
 
+  // New method: Update helicopter physics when player is controlling
+  private updateHelicopterPhysics(deltaTime: number): void {
+    if (!this.playerController || !this.playerController.isInHelicopter()) {
+      return; // Only update physics when player is flying
+    }
+
+    const helicopterId = this.playerController.getHelicopterId();
+    if (!helicopterId) return;
+
+    const helicopter = this.helicopters.get(helicopterId);
+    const physics = this.helicopterPhysics.get(helicopterId);
+
+    if (!helicopter || !physics || !this.terrainManager) {
+      return;
+    }
+
+    // Get control inputs from player controller
+    const controls = this.getControlInputs();
+    physics.setControls(controls);
+
+    // Get terrain height at helicopter position
+    const currentPos = physics.getState().position;
+    const terrainHeight = this.terrainManager.getHeightAt(currentPos.x, currentPos.z);
+
+    // Update physics
+    physics.update(deltaTime, terrainHeight);
+
+    // Apply physics state to 3D model
+    const state = physics.getState();
+    helicopter.position.copy(state.position);
+    helicopter.quaternion.copy(state.quaternion);
+
+    // Update player controller with new position for camera
+    this.playerController.setPosition(state.position);
+  }
+
+  // Get control inputs from keyboard/mouse
+  private getControlInputs(): Partial<HelicopterControls> {
+    // This will be called by the PlayerController to provide input
+    // For now, return default values - we'll update PlayerController to provide these
+    return {};
+  }
+
+  // New method: Update rotor animations
+  private updateRotorAnimations(deltaTime: number): void {
+    this.helicopters.forEach((helicopter, id) => {
+      const physics = this.helicopterPhysics.get(id);
+      let targetMainSpeed = 0;
+      let targetTailSpeed = 0;
+
+      if (physics) {
+        const audioParams = physics.getEngineAudioParams();
+        // Base rotor speed from engine RPM
+        targetMainSpeed = audioParams.rpm * 15; // rad/s (realistic main rotor speed)
+        targetTailSpeed = targetMainSpeed * 4.5; // Tail rotor spins faster
+      }
+
+      // Smooth rotor acceleration
+      const currentMainSpeed = this.mainRotorSpeed.get(id) || 0;
+      const currentTailSpeed = this.tailRotorSpeed.get(id) || 0;
+
+      const newMainSpeed = THREE.MathUtils.lerp(
+        currentMainSpeed,
+        targetMainSpeed,
+        this.rotorAcceleration * deltaTime
+      );
+
+      const newTailSpeed = THREE.MathUtils.lerp(
+        currentTailSpeed,
+        targetTailSpeed,
+        this.rotorAcceleration * deltaTime
+      );
+
+      this.mainRotorSpeed.set(id, newMainSpeed);
+      this.tailRotorSpeed.set(id, newTailSpeed);
+
+      // Apply rotations to rotor groups
+      helicopter.traverse((child) => {
+        if (child.userData.type === 'mainBlades') {
+          child.rotation.y += newMainSpeed * deltaTime;
+        } else if (child.userData.type === 'tailBlades') {
+          child.rotation.z += newTailSpeed * deltaTime;
+        }
+      });
+    });
+  }
+
+  // Public method for PlayerController to set helicopter controls
+  setHelicopterControls(helicopterId: string, controls: Partial<HelicopterControls>): void {
+    const physics = this.helicopterPhysics.get(helicopterId);
+    if (physics) {
+      physics.setControls(controls);
+    }
+  }
+
+  // Get helicopter physics state for external systems
+  getHelicopterState(helicopterId: string) {
+    const physics = this.helicopterPhysics.get(helicopterId);
+    return physics ? physics.getState() : null;
+  }
+
   dispose(): void {
     this.helicopters.forEach(helicopter => {
       this.scene.remove(helicopter);
@@ -715,6 +835,9 @@ export class HelicopterModel implements GameSystem {
       });
     });
     this.helicopters.clear();
+    this.helicopterPhysics.clear();
+    this.mainRotorSpeed.clear();
+    this.tailRotorSpeed.clear();
 
     // Unregister collision objects
     if (this.terrainManager && 'unregisterCollisionObject' in this.terrainManager) {

@@ -4,6 +4,7 @@ import { MathUtils } from '../../utils/Math';
 import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { GameModeManager } from '../world/GameModeManager';
 import { Faction } from '../combat/types';
+import { HelicopterControls } from '../helicopter/HelicopterPhysics';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
@@ -29,6 +30,19 @@ export class PlayerController implements GameSystem {
   private helicopterCameraDistance = 25; // Distance behind helicopter for full view
   private helicopterCameraHeight = 8; // Height above helicopter for good overview
   private helicopterCameraAngle = -0.1; // Very slight downward angle
+
+  // Helicopter controls state
+  private helicopterControls: HelicopterControls = {
+    collective: 0,
+    cyclicPitch: 0,
+    cyclicRoll: 0,
+    yaw: 0,
+    engineBoost: false,
+    autoHover: true
+  };
+
+  // Mouse control mode for helicopter
+  private helicopterMouseControlEnabled = true; // True = mouse affects controls, False = free orbital look
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -65,7 +79,13 @@ export class PlayerController implements GameSystem {
 
   update(deltaTime: number): void {
     if (!this.isControlsEnabled) return; // Skip updates when dead
-    this.updateMovement(deltaTime);
+
+    if (this.playerState.isInHelicopter) {
+      this.updateHelicopterControls(deltaTime);
+    } else {
+      this.updateMovement(deltaTime);
+    }
+
     this.updateCamera();
     this.updateHUD();
 
@@ -146,13 +166,37 @@ export class PlayerController implements GameSystem {
         }
       }
     }
+
+    // Helicopter-specific controls
+    if (this.playerState.isInHelicopter) {
+      // Toggle auto-hover with Space
+      if (event.code === 'Space') {
+        this.helicopterControls.autoHover = !this.helicopterControls.autoHover;
+        console.log(`🚁 Auto-hover ${this.helicopterControls.autoHover ? 'enabled' : 'disabled'}`);
+      }
+
+      // Engine boost with Shift
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        this.helicopterControls.engineBoost = true;
+      }
+
+      // Toggle mouse control mode with Right Ctrl
+      if (event.code === 'ControlRight') {
+        this.helicopterMouseControlEnabled = !this.helicopterMouseControlEnabled;
+        console.log(`🚁 Mouse control ${this.helicopterMouseControlEnabled ? 'enabled (affects controls)' : 'disabled (free orbital look)'}`);
+      }
+    }
   }
 
   private onKeyUp(event: KeyboardEvent): void {
     this.keys.delete(event.code.toLowerCase());
-    
+
     if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
       this.playerState.isRunning = false;
+      // Also disable helicopter engine boost
+      if (this.playerState.isInHelicopter) {
+        this.helicopterControls.engineBoost = false;
+      }
     }
   }
 
@@ -281,6 +325,78 @@ export class PlayerController implements GameSystem {
     }
 
     this.playerState.position.copy(newPosition);
+  }
+
+  private updateHelicopterControls(deltaTime: number): void {
+    // Update helicopter controls based on keyboard input
+
+    // Collective (W/S) - vertical thrust
+    if (this.keys.has('keyw')) {
+      this.helicopterControls.collective = Math.min(1.0, this.helicopterControls.collective + 2.0 * deltaTime);
+    } else if (this.keys.has('keys')) {
+      this.helicopterControls.collective = Math.max(0.0, this.helicopterControls.collective - 2.0 * deltaTime);
+    } else {
+      // Auto-stabilize collective for hover
+      if (this.helicopterControls.autoHover) {
+        this.helicopterControls.collective = THREE.MathUtils.lerp(this.helicopterControls.collective, 0.4, deltaTime * 2.0);
+      }
+    }
+
+    // Yaw (A/D) - tail rotor, turning
+    if (this.keys.has('keya')) {
+      this.helicopterControls.yaw = Math.max(-1.0, this.helicopterControls.yaw - 3.0 * deltaTime);
+    } else if (this.keys.has('keyd')) {
+      this.helicopterControls.yaw = Math.min(1.0, this.helicopterControls.yaw + 3.0 * deltaTime);
+    } else {
+      // Return to center
+      this.helicopterControls.yaw = THREE.MathUtils.lerp(this.helicopterControls.yaw, 0, deltaTime * 8.0);
+    }
+
+    // Cyclic Pitch (Arrow Up/Down) - forward/backward movement
+    if (this.keys.has('arrowup')) {
+      this.helicopterControls.cyclicPitch = Math.max(-1.0, this.helicopterControls.cyclicPitch - 2.0 * deltaTime);
+    } else if (this.keys.has('arrowdown')) {
+      this.helicopterControls.cyclicPitch = Math.min(1.0, this.helicopterControls.cyclicPitch + 2.0 * deltaTime);
+    } else {
+      // Auto-level pitch
+      this.helicopterControls.cyclicPitch = THREE.MathUtils.lerp(this.helicopterControls.cyclicPitch, 0, deltaTime * 4.0);
+    }
+
+    // Cyclic Roll (Arrow Left/Right) - left/right banking
+    if (this.keys.has('arrowleft')) {
+      this.helicopterControls.cyclicRoll = Math.max(-1.0, this.helicopterControls.cyclicRoll - 2.0 * deltaTime);
+    } else if (this.keys.has('arrowright')) {
+      this.helicopterControls.cyclicRoll = Math.min(1.0, this.helicopterControls.cyclicRoll + 2.0 * deltaTime);
+    } else {
+      // Auto-level roll
+      this.helicopterControls.cyclicRoll = THREE.MathUtils.lerp(this.helicopterControls.cyclicRoll, 0, deltaTime * 4.0);
+    }
+
+    // Add mouse control input when enabled
+    if (this.helicopterMouseControlEnabled && this.isPointerLocked) {
+      const mouseSensitivity = 0.5;
+
+      // Mouse X controls roll (banking)
+      this.helicopterControls.cyclicRoll = THREE.MathUtils.clamp(
+        this.helicopterControls.cyclicRoll + this.mouseMovement.x * mouseSensitivity,
+        -1.0, 1.0
+      );
+
+      // Mouse Y controls pitch (forward/backward)
+      this.helicopterControls.cyclicPitch = THREE.MathUtils.clamp(
+        this.helicopterControls.cyclicPitch + this.mouseMovement.y * mouseSensitivity,
+        -1.0, 1.0
+      );
+
+      // Clear mouse movement since we've used it for controls
+      this.mouseMovement.x = 0;
+      this.mouseMovement.y = 0;
+    }
+
+    // Send controls to helicopter model
+    if (this.helicopterModel && this.playerState.helicopterId) {
+      this.helicopterModel.setHelicopterControls(this.playerState.helicopterId, this.helicopterControls);
+    }
   }
 
   private updateCamera(): void {
@@ -413,11 +529,14 @@ export class PlayerController implements GameSystem {
   private showControls(): void {
     console.log(`
 🎮 CONTROLS:
-WASD - Move
-Shift - Run
-Space - Jump
+WASD - Move / Helicopter Controls (W/S = Collective, A/D = Yaw)
+Arrow Keys - Helicopter Cyclic (↑↓ = Pitch, ←→ = Roll)
+Shift - Run / Engine Boost (in helicopter)
+Space - Jump / Toggle Auto-Hover (in helicopter)
+Right Ctrl - Toggle Mouse Control Mode (helicopter: control vs free look)
+E - Enter/Exit Helicopter
 Mouse - Look around (click to enable pointer lock)
-Escape - Release pointer lock
+Escape - Release pointer lock / Exit helicopter
     `);
   }
 
