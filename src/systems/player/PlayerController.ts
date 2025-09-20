@@ -184,6 +184,11 @@ export class PlayerController implements GameSystem {
       if (event.code === 'ControlRight') {
         this.helicopterMouseControlEnabled = !this.helicopterMouseControlEnabled;
         console.log(`🚁 Mouse control ${this.helicopterMouseControlEnabled ? 'enabled (affects controls)' : 'disabled (free orbital look)'}`);
+
+        // Update HUD indicator
+        if (this.hudSystem) {
+          this.hudSystem.updateHelicopterMouseMode(this.helicopterMouseControlEnabled);
+        }
       }
     }
   }
@@ -645,6 +650,12 @@ Escape - Release pointer lock / Exit helicopter
     // Unequip weapon when entering helicopter
     this.unequipWeapon();
 
+    // Show helicopter mouse control indicator
+    if (this.hudSystem) {
+      this.hudSystem.showHelicopterMouseIndicator();
+      this.hudSystem.updateHelicopterMouseMode(this.helicopterMouseControlEnabled);
+    }
+
     console.log(`🚁 Player entered helicopter at position (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)})`);
     console.log(`🚁 📹 CAMERA MODE: Switched to helicopter camera (flight sim style)`);
   }
@@ -661,6 +672,11 @@ Escape - Release pointer lock / Exit helicopter
 
     // Equip weapon when exiting helicopter
     this.equipWeapon();
+
+    // Hide helicopter mouse control indicator
+    if (this.hudSystem) {
+      this.hudSystem.hideHelicopterMouseIndicator();
+    }
 
     console.log(`🚁 Player exited helicopter to position (${exitPosition.x.toFixed(1)}, ${exitPosition.y.toFixed(1)}, ${exitPosition.z.toFixed(1)})`);
     console.log(`🚁 📹 CAMERA MODE: Switched to first-person camera`);

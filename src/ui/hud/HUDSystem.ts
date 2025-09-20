@@ -129,4 +129,17 @@ export class HUDSystem implements GameSystem {
   updateElevation(elevation: number): void {
     this.elements.updateElevation(elevation);
   }
+
+  // Helicopter mouse control indicator methods (only available in helicopter)
+  showHelicopterMouseIndicator(): void {
+    this.elements.showHelicopterMouseIndicator();
+  }
+
+  hideHelicopterMouseIndicator(): void {
+    this.elements.hideHelicopterMouseIndicator();
+  }
+
+  updateHelicopterMouseMode(controlMode: boolean): void {
+    this.elements.updateHelicopterMouseMode(controlMode);
+  }
 }
