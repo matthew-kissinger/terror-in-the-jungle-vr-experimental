@@ -444,7 +444,7 @@ export class PlayerController implements GameSystem {
   }
 
   private updateHelicopterCamera(): void {
-    // Get helicopter position
+    // Get helicopter position and rotation
     const helicopterId = this.playerState.helicopterId;
     if (!helicopterId || !this.helicopterModel) {
       // Fallback to first-person if helicopter not found
@@ -453,50 +453,74 @@ export class PlayerController implements GameSystem {
     }
 
     const helicopterPosition = this.helicopterModel.getHelicopterPosition(helicopterId);
-    if (!helicopterPosition) {
-      // Fallback to first-person if helicopter position not found
+    const helicopterQuaternion = this.helicopterModel.getHelicopterQuaternion(helicopterId);
+    if (!helicopterPosition || !helicopterQuaternion) {
+      // Fallback to first-person if helicopter data not found
       this.updateFirstPersonCamera();
       return;
     }
 
-    // Handle mouse input based on control mode
-    if (this.isPointerLocked && !this.helicopterMouseControlEnabled) {
-      // Free look mode - mouse controls camera rotation
-      this.yaw -= this.mouseMovement.x * 0.5; // Slower sensitivity for helicopter cam
-      this.pitch -= this.mouseMovement.y * 0.5;
-      this.pitch = MathUtils.clamp(this.pitch, -this.maxPitch * 0.7, this.maxPitch * 0.7); // Less vertical range
+    const distanceBack = this.helicopterCameraDistance;
+    const heightAbove = this.helicopterCameraHeight;
+
+    if (!this.helicopterMouseControlEnabled && this.isPointerLocked) {
+      // Free orbital look mode - mouse controls camera orbital position around helicopter
+      const mouseSensitivity = 0.003; // Smoother orbital movement
+
+      this.yaw -= this.mouseMovement.x * mouseSensitivity;
+      this.pitch -= this.mouseMovement.y * mouseSensitivity;
+
+      // Allow full 360-degree horizontal rotation
+      // Clamp vertical rotation to prevent flipping (slightly above/below helicopter)
+      this.pitch = MathUtils.clamp(this.pitch, -Math.PI * 0.4, Math.PI * 0.4); // -72° to +72° vertical range
 
       // Reset mouse movement
       this.mouseMovement.x = 0;
       this.mouseMovement.y = 0;
+
+      // Spherical coordinate orbital camera positioning
+      const radius = distanceBack;
+      const x = radius * Math.cos(this.pitch) * Math.sin(this.yaw);
+      const y = radius * Math.sin(this.pitch) + heightAbove; // Add base height offset
+      const z = radius * Math.cos(this.pitch) * Math.cos(this.yaw);
+
+      // Position camera in orbit around helicopter
+      const cameraPosition = new THREE.Vector3(x, y, z);
+      cameraPosition.add(helicopterPosition);
+
+      this.camera.position.copy(cameraPosition);
+
+      // Always look at helicopter center regardless of orbital position
+      const lookTarget = helicopterPosition.clone();
+      lookTarget.y += 2; // Look at helicopter body center
+      this.camera.lookAt(lookTarget);
+    } else {
+      // Following mode - camera follows behind helicopter based on its rotation
+      // Helicopter model is built rotated 90 degrees, so forward is actually -Z in local space
+      const helicopterForward = new THREE.Vector3(0, 0, -1); // Local forward direction
+      helicopterForward.applyQuaternion(helicopterQuaternion); // Transform to world space
+
+      // Camera position: behind helicopter (opposite of forward direction)
+      const cameraPosition = helicopterPosition.clone();
+      cameraPosition.add(helicopterForward.clone().multiplyScalar(-distanceBack)); // Behind
+      cameraPosition.y += heightAbove;
+
+      this.camera.position.copy(cameraPosition);
+
+      // Look at helicopter center
+      const lookTarget = helicopterPosition.clone();
+      lookTarget.y += 2;
+      this.camera.lookAt(lookTarget);
+
+      // When switching back to follow mode, reset camera angles to match helicopter
+      if (this.helicopterMouseControlEnabled) {
+        // Extract yaw from helicopter quaternion for smooth camera following
+        const euler = new THREE.Euler().setFromQuaternion(helicopterQuaternion, 'YXZ');
+        this.yaw = euler.y;
+        this.pitch = 0; // Reset pitch for chase cam
+      }
     }
-    // Note: When helicopterMouseControlEnabled is true, mouse movement is handled in updateHelicopterControls
 
-    // Chase cam style: Camera always stays behind helicopter
-    // For now, helicopter faces forward (negative X direction), so camera goes to positive X (behind)
-    // Future: This will work with helicopter rotation using helicopter's transform matrix
-
-    const distanceBack = this.helicopterCameraDistance;
-    const heightAbove = this.helicopterCameraHeight;
-
-    // Position camera behind helicopter (positive X since helicopter faces negative X)
-    const cameraPosition = new THREE.Vector3(
-      helicopterPosition.x + distanceBack, // Behind helicopter (helicopter faces -X, so camera at +X)
-      helicopterPosition.y + heightAbove,  // Above helicopter
-      helicopterPosition.z                 // Same Z as helicopter
-    );
-
-    // Set camera position
-    this.camera.position.copy(cameraPosition);
-
-    // Chase cam: Camera looks at helicopter center from behind
-    const lookTarget = helicopterPosition.clone();
-    lookTarget.y += 2; // Look at helicopter center/body, not skids
-
-    // Use lookAt to always face the helicopter from behind
-    this.camera.lookAt(lookTarget);
-
-    // Apply very slight downward tilt for better perspective
     this.camera.rotation.x += this.helicopterCameraAngle;
 
     console.log(`🚁 📹 Helicopter camera: pos(${cameraPosition.x.toFixed(1)}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(1)}) looking at heli(${lookTarget.x.toFixed(1)}, ${lookTarget.y.toFixed(1)}, ${lookTarget.z.toFixed(1)})`);
