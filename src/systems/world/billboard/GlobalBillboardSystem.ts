@@ -22,6 +22,9 @@ export class GlobalBillboardSystem implements GameSystem {
   // Toggle to use GPU for vegetation
   private useGPUForVegetation = true;
 
+  // Exclusion zones where vegetation should not spawn
+  private exclusionZones: Array<{ x: number; z: number; radius: number }> = [];
+
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
     this.camera = camera;
@@ -79,15 +82,24 @@ export class GlobalBillboardSystem implements GameSystem {
     banyanInstances?: BillboardInstance[]
   ): void {
     if (this.useGPUForVegetation) {
+      // Filter all vegetation types through exclusion zones
+      const filteredFern = fernInstances ? this.filterVegetationInstances(fernInstances) : undefined;
+      const filteredElephantEar = elephantEarInstances ? this.filterVegetationInstances(elephantEarInstances) : undefined;
+      const filteredFanPalm = fanPalmInstances ? this.filterVegetationInstances(fanPalmInstances) : undefined;
+      const filteredCoconut = coconutInstances ? this.filterVegetationInstances(coconutInstances) : undefined;
+      const filteredAreca = arecaInstances ? this.filterVegetationInstances(arecaInstances) : undefined;
+      const filteredDipterocarp = dipterocarpInstances ? this.filterVegetationInstances(dipterocarpInstances) : undefined;
+      const filteredBanyan = banyanInstances ? this.filterVegetationInstances(banyanInstances) : undefined;
+
       // Convert to GPU format and add
       const types: Array<[string, BillboardInstance[] | undefined]> = [
-        ['fern', fernInstances],
-        ['elephantEar', elephantEarInstances],
-        ['fanPalm', fanPalmInstances],
-        ['coconut', coconutInstances],
-        ['areca', arecaInstances],
-        ['dipterocarp', dipterocarpInstances],
-        ['banyan', banyanInstances]
+        ['fern', filteredFern],
+        ['elephantEar', filteredElephantEar],
+        ['fanPalm', filteredFanPalm],
+        ['coconut', filteredCoconut],
+        ['areca', filteredAreca],
+        ['dipterocarp', filteredDipterocarp],
+        ['banyan', filteredBanyan]
       ];
 
       let totalAdded = 0;
@@ -102,15 +114,16 @@ export class GlobalBillboardSystem implements GameSystem {
         console.log(`🌿 GPU: Added ${totalAdded} vegetation instances for chunk ${chunkKey}`);
       }
     } else if (this.instanceManager) {
+      // Filter vegetation for CPU system too
       this.instanceManager.addChunkInstances(
         chunkKey,
-        fernInstances,
-        elephantEarInstances,
-        fanPalmInstances,
-        coconutInstances,
-        arecaInstances,
-        dipterocarpInstances,
-        banyanInstances
+        fernInstances ? this.filterVegetationInstances(fernInstances) : fernInstances,
+        elephantEarInstances ? this.filterVegetationInstances(elephantEarInstances) : elephantEarInstances,
+        fanPalmInstances ? this.filterVegetationInstances(fanPalmInstances) : fanPalmInstances,
+        coconutInstances ? this.filterVegetationInstances(coconutInstances) : coconutInstances,
+        arecaInstances ? this.filterVegetationInstances(arecaInstances) : arecaInstances,
+        dipterocarpInstances ? this.filterVegetationInstances(dipterocarpInstances) : dipterocarpInstances,
+        banyanInstances ? this.filterVegetationInstances(banyanInstances) : banyanInstances
       );
     }
   }
@@ -124,6 +137,51 @@ export class GlobalBillboardSystem implements GameSystem {
     } else if (this.instanceManager) {
       this.instanceManager.removeChunkInstances(chunkKey);
     }
+  }
+
+  /**
+   * Add an exclusion zone where vegetation should not spawn and clear existing vegetation
+   */
+  addExclusionZone(x: number, z: number, radius: number): void {
+    this.exclusionZones.push({ x, z, radius });
+    console.log(`🚁 Added vegetation exclusion zone at (${x}, ${z}) with radius ${radius}`);
+
+    // Clear existing vegetation in this area by regenerating affected chunks
+    this.clearVegetationInArea(x, z, radius);
+  }
+
+  /**
+   * Clear existing vegetation in a specific area by removing instances
+   */
+  private clearVegetationInArea(x: number, z: number, radius: number): void {
+    if (this.useGPUForVegetation) {
+      console.log(`🚁 Clearing existing vegetation in ${radius}m radius around (${x}, ${z})`);
+      this.gpuVegetationSystem.clearInstancesInArea(x, z, radius);
+    }
+  }
+
+  /**
+   * Check if a position is within any exclusion zone
+   */
+  private isInExclusionZone(x: number, z: number): boolean {
+    for (const zone of this.exclusionZones) {
+      const distance = Math.sqrt((x - zone.x) ** 2 + (z - zone.z) ** 2);
+      if (distance <= zone.radius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Filter vegetation instances to exclude those in exclusion zones
+   */
+  private filterVegetationInstances(instances: BillboardInstance[]): BillboardInstance[] {
+    if (this.exclusionZones.length === 0) {
+      return instances;
+    }
+
+    return instances.filter(instance => !this.isInExclusionZone(instance.position.x, instance.position.z));
   }
 
   /**

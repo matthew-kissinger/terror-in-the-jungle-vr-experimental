@@ -19,6 +19,8 @@ import { GameMode } from '../config/gameModes';
 import { PlayerRespawnManager } from '../systems/player/PlayerRespawnManager';
 import { FullMapSystem } from '../ui/map/FullMapSystem';
 import { CompassSystem } from '../ui/compass/CompassSystem';
+import { HelipadSystem } from '../systems/helicopter/HelipadSystem';
+import { HelicopterModel } from '../systems/helicopter/HelicopterModel';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -42,6 +44,8 @@ export class SandboxSystemManager {
   public playerRespawnManager!: PlayerRespawnManager;
   public fullMapSystem!: FullMapSystem;
   public compassSystem!: CompassSystem;
+  public helipadSystem!: HelipadSystem;
+  public helicopterModel!: HelicopterModel;
 
   async initializeSystems(
     scene: THREE.Scene,
@@ -88,6 +92,8 @@ export class SandboxSystemManager {
     this.fullMapSystem = new FullMapSystem(camera);
     this.compassSystem = new CompassSystem(camera);
     this.gameModeManager = new GameModeManager();
+    this.helipadSystem = new HelipadSystem(scene);
+    this.helicopterModel = new HelicopterModel(scene);
 
     this.connectSystems(scene, camera);
 
@@ -109,6 +115,8 @@ export class SandboxSystemManager {
       this.fullMapSystem,
       this.compassSystem,
       this.hudSystem,
+      this.helipadSystem,
+      this.helicopterModel,
       this.skybox,
       this.gameModeManager
     ];
@@ -167,6 +175,15 @@ export class SandboxSystemManager {
     this.playerRespawnManager.setGameModeManager(this.gameModeManager);
     this.playerRespawnManager.setPlayerController(this.playerController);
     this.playerRespawnManager.setFirstPersonWeapon(this.firstPersonWeapon);
+
+    // Connect helipad system
+    this.helipadSystem.setTerrainManager(this.chunkManager);
+    this.helipadSystem.setVegetationSystem(this.globalBillboardSystem);
+    this.helipadSystem.setGameModeManager(this.gameModeManager);
+
+    // Connect helicopter model
+    this.helicopterModel.setTerrainManager(this.chunkManager);
+    this.helicopterModel.setHelipadSystem(this.helipadSystem);
 
     // Connect game mode manager to systems
     this.gameModeManager.connectSystems(

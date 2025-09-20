@@ -282,6 +282,11 @@ export class GPUBillboardVegetation {
     console.log(`🔻 GPU Vegetation: Hid ${indices.length} instances`);
   }
 
+  // Get instance positions for area clearing
+  getInstancePositions(): Float32Array {
+    return this.positions;
+  }
+
   // Reset all instances (for full cleanup)
   reset(): void {
     this.activeCount = 0;
@@ -461,6 +466,40 @@ export class GPUBillboardSystem {
     }
 
     return info;
+  }
+
+  /**
+   * Clear vegetation instances in a specific area
+   */
+  clearInstancesInArea(centerX: number, centerZ: number, radius: number): void {
+    console.log(`🗑️ GPU: Clearing vegetation in ${radius}m radius around (${centerX}, ${centerZ})`);
+
+    let totalCleared = 0;
+
+    // Go through each vegetation type
+    this.vegetationTypes.forEach((vegetation, type) => {
+      const indicesToRemove: number[] = [];
+
+      // Check each instance position
+      const positions = vegetation.getInstancePositions(); // We'll need to implement this
+      for (let i = 0; i < positions.length; i += 3) { // x, y, z
+        const x = positions[i];
+        const z = positions[i + 2];
+
+        const distance = Math.sqrt((x - centerX) ** 2 + (z - centerZ) ** 2);
+        if (distance <= radius) {
+          indicesToRemove.push(i / 3); // Convert back to instance index
+        }
+      }
+
+      if (indicesToRemove.length > 0) {
+        vegetation.removeInstances(indicesToRemove);
+        totalCleared += indicesToRemove.length;
+        console.log(`🗑️ GPU: Removed ${indicesToRemove.length} ${type} instances`);
+      }
+    });
+
+    console.log(`🗑️ GPU: Total vegetation instances cleared: ${totalCleared}`);
   }
 
   // Dispose all resources

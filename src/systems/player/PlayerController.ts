@@ -222,8 +222,8 @@ export class PlayerController implements GameSystem {
     // Check ground collision using ImprovedChunkManager if available, otherwise use flat baseline
     let groundHeight = 2; // Default player height above ground (flat world fallback)
     if (this.chunkManager) {
-      const terrainHeight = this.chunkManager.getHeightAt(newPosition.x, newPosition.z);
-      groundHeight = terrainHeight + 2;
+      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(newPosition.x, newPosition.z);
+      groundHeight = effectiveHeight + 2;
     }
     
     if (newPosition.y <= groundHeight) {
