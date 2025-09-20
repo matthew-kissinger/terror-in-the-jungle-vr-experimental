@@ -402,6 +402,16 @@ export class PlayerController implements GameSystem {
     if (this.helicopterModel && this.playerState.helicopterId) {
       this.helicopterModel.setHelicopterControls(this.playerState.helicopterId, this.helicopterControls);
     }
+
+    // Update helicopter instruments HUD
+    if (this.hudSystem) {
+      this.hudSystem.updateHelicopterInstruments(
+        this.helicopterControls.collective,
+        this.helicopterControls.collective * 0.8 + 0.2, // Simple RPM simulation based on collective
+        this.helicopterControls.autoHover,
+        this.helicopterControls.engineBoost
+      );
+    }
   }
 
   private updateCamera(): void {
@@ -449,8 +459,9 @@ export class PlayerController implements GameSystem {
       return;
     }
 
-    // Allow mouse control for helicopter camera - but with different sensitivity
-    if (this.isPointerLocked) {
+    // Handle mouse input based on control mode
+    if (this.isPointerLocked && !this.helicopterMouseControlEnabled) {
+      // Free look mode - mouse controls camera rotation
       this.yaw -= this.mouseMovement.x * 0.5; // Slower sensitivity for helicopter cam
       this.pitch -= this.mouseMovement.y * 0.5;
       this.pitch = MathUtils.clamp(this.pitch, -this.maxPitch * 0.7, this.maxPitch * 0.7); // Less vertical range
@@ -459,6 +470,7 @@ export class PlayerController implements GameSystem {
       this.mouseMovement.x = 0;
       this.mouseMovement.y = 0;
     }
+    // Note: When helicopterMouseControlEnabled is true, mouse movement is handled in updateHelicopterControls
 
     // Chase cam style: Camera always stays behind helicopter
     // For now, helicopter faces forward (negative X direction), so camera goes to positive X (behind)
@@ -503,6 +515,12 @@ export class PlayerController implements GameSystem {
     this.playerState.velocity.set(0, 0, 0);
     this.playerState.isGrounded = false;
     console.log(`Player teleported to ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+  }
+
+  // Update position without affecting camera (for helicopter physics)
+  updatePlayerPosition(position: THREE.Vector3): void {
+    this.playerState.position.copy(position);
+    // Don't update camera position - let helicopter camera handle it
   }
 
   // Disable controls (for death)
@@ -650,10 +668,11 @@ Escape - Release pointer lock / Exit helicopter
     // Unequip weapon when entering helicopter
     this.unequipWeapon();
 
-    // Show helicopter mouse control indicator
+    // Show helicopter mouse control indicator and instruments
     if (this.hudSystem) {
       this.hudSystem.showHelicopterMouseIndicator();
       this.hudSystem.updateHelicopterMouseMode(this.helicopterMouseControlEnabled);
+      this.hudSystem.showHelicopterInstruments();
     }
 
     console.log(`🚁 Player entered helicopter at position (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)})`);
@@ -673,9 +692,10 @@ Escape - Release pointer lock / Exit helicopter
     // Equip weapon when exiting helicopter
     this.equipWeapon();
 
-    // Hide helicopter mouse control indicator
+    // Hide helicopter mouse control indicator and instruments
     if (this.hudSystem) {
       this.hudSystem.hideHelicopterMouseIndicator();
+      this.hudSystem.hideHelicopterInstruments();
     }
 
     console.log(`🚁 Player exited helicopter to position (${exitPosition.x.toFixed(1)}, ${exitPosition.y.toFixed(1)}, ${exitPosition.z.toFixed(1)})`);

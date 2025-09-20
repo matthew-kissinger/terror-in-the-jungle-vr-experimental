@@ -142,4 +142,17 @@ export class HUDSystem implements GameSystem {
   updateHelicopterMouseMode(controlMode: boolean): void {
     this.elements.updateHelicopterMouseMode(controlMode);
   }
+
+  // Helicopter instruments methods (only visible in helicopter)
+  showHelicopterInstruments(): void {
+    this.elements.showHelicopterInstruments();
+  }
+
+  hideHelicopterInstruments(): void {
+    this.elements.hideHelicopterInstruments();
+  }
+
+  updateHelicopterInstruments(collective: number, rpm: number, autoHover: boolean, engineBoost: boolean): void {
+    this.elements.updateHelicopterInstruments(collective, rpm, autoHover, engineBoost);
+  }
 }

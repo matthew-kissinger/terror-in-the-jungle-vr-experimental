@@ -742,16 +742,32 @@ export class HelicopterModel implements GameSystem {
     const currentPos = physics.getState().position;
     const terrainHeight = this.terrainManager.getHeightAt(currentPos.x, currentPos.z);
 
+    // Check if helicopter is over a helipad
+    let helipadHeight: number | undefined;
+    if (this.helipadSystem) {
+      const helipadPos = this.helipadSystem.getHelipadPosition('us_helipad');
+      if (helipadPos) {
+        const distanceToHelipad = Math.sqrt(
+          Math.pow(currentPos.x - helipadPos.x, 2) +
+          Math.pow(currentPos.z - helipadPos.z, 2)
+        );
+        // If within helipad radius, use helipad height
+        if (distanceToHelipad < 15) { // Helipad collision radius
+          helipadHeight = helipadPos.y;
+        }
+      }
+    }
+
     // Update physics
-    physics.update(deltaTime, terrainHeight);
+    physics.update(deltaTime, terrainHeight, helipadHeight);
 
     // Apply physics state to 3D model
     const state = physics.getState();
     helicopter.position.copy(state.position);
     helicopter.quaternion.copy(state.quaternion);
 
-    // Update player controller with new position for camera
-    this.playerController.setPosition(state.position);
+    // Update player position without affecting camera (camera has its own logic)
+    this.playerController.updatePlayerPosition(state.position);
   }
 
   // Get control inputs from keyboard/mouse

@@ -65,10 +65,15 @@ export class HelicopterPhysics {
     this.smoothedControls = { ...this.controls };
   }
 
-  update(deltaTime: number, terrainHeight: number): void {
-    // Update ground height
-    this.state.groundHeight = terrainHeight;
-    this.state.isGrounded = this.state.position.y <= (terrainHeight + 1.0);
+  update(deltaTime: number, terrainHeight: number, helipadHeight?: number): void {
+    // Update ground height - use helipad height if available and higher than terrain
+    let effectiveGroundHeight = terrainHeight;
+    if (helipadHeight !== undefined && helipadHeight > terrainHeight) {
+      effectiveGroundHeight = helipadHeight;
+    }
+
+    this.state.groundHeight = effectiveGroundHeight;
+    this.state.isGrounded = this.state.position.y <= (effectiveGroundHeight + 1.0);
 
     // Smooth control inputs for better feel
     this.smoothControlInputs(deltaTime);
