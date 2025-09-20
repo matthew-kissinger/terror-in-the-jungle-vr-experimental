@@ -7,7 +7,11 @@ export class HelicopterModel implements GameSystem {
   private scene: THREE.Scene;
   private terrainManager?: ImprovedChunkManager;
   private helipadSystem?: HelipadSystem;
+  private playerController?: any;
+  private hudSystem?: any;
   private helicopters: Map<string, THREE.Group> = new Map();
+  private interactionRadius = 5.0; // Distance from helicopter to show prompt (around helicopter size)
+  private isPlayerNearHelicopter = false;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -23,6 +27,14 @@ export class HelicopterModel implements GameSystem {
 
   setHelipadSystem(helipadSystem: HelipadSystem): void {
     this.helipadSystem = helipadSystem;
+  }
+
+  setPlayerController(playerController: any): void {
+    this.playerController = playerController;
+  }
+
+  setHUDSystem(hudSystem: any): void {
+    this.hudSystem = hudSystem;
   }
 
   createHelicopterWhenReady(): void {
@@ -47,9 +59,9 @@ export class HelicopterModel implements GameSystem {
     // Position helicopter on helipad center with safe height calculation
     const helicopterPosition = helipadPosition.clone();
 
-    // Use safer height calculation - ensure helicopter sits properly on helipad
+    // Use safer height calculation - helicopter sits directly on helipad surface
     const baseHeight = Math.max(helipadPosition.y, this.terrainManager.getHeightAt(helipadPosition.x, helipadPosition.z));
-    helicopterPosition.y = baseHeight + 0.8; // Landing skids touch helipad surface
+    helicopterPosition.y = baseHeight; // Helicopter sits directly on helipad, not floating
 
     const helicopter = this.createUH1HueyGeometry();
     helicopter.position.copy(helicopterPosition);
@@ -63,6 +75,10 @@ export class HelicopterModel implements GameSystem {
     }
 
     console.log(`🚁 ✅ Created US UH-1 Huey at position (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)})`);
+    console.log(`🚁 DEBUG: Helipad position: (${helipadPosition.x.toFixed(1)}, ${helipadPosition.y.toFixed(1)}, ${helipadPosition.z.toFixed(1)})`);
+    console.log(`🚁 DEBUG: Base height: ${baseHeight.toFixed(2)}, Final height: ${helicopterPosition.y.toFixed(2)}`);
+    console.log(`🚁 DEBUG: Helicopter children count: ${helicopter.children.length}`);
+    console.log(`🚁 DEBUG: Scene children count: ${this.scene.children.length}`);
   }
 
   private createUH1HueyGeometry(): THREE.Group {
@@ -526,7 +542,7 @@ export class HelicopterModel implements GameSystem {
 
         // Create helicopter only when we have valid terrain data and chunk is loaded
         if ((terrainHeight > -100 && isChunkLoaded) || terrainHeight > 0) {
-          console.log(`🚁 Creating helicopter - helipad at (${helipadPosition.x}, ${helipadPosition.y}, ${helipadPosition.z}), terrain: ${terrainHeight.toFixed(2)}, chunk loaded: ${isChunkLoaded}`);
+          console.log(`🚁 ⚡ CREATING HELICOPTER NOW! Helipad at (${helipadPosition.x}, ${helipadPosition.y}, ${helipadPosition.z}), terrain: ${terrainHeight.toFixed(2)}, chunk loaded: ${isChunkLoaded}`);
           this.createUSHuey();
         } else {
           // Optional: Log waiting status occasionally
@@ -537,7 +553,150 @@ export class HelicopterModel implements GameSystem {
       }
     }
 
+    // Check player proximity to helicopter for interaction prompt
+    this.checkPlayerProximity();
+
     // Future: Add rotor animation here
+  }
+
+  private checkPlayerProximity(): void {
+    if (!this.playerController || !this.hudSystem) {
+      console.log('🚁 DEBUG: Missing systems - playerController:', !!this.playerController, 'hudSystem:', !!this.hudSystem);
+      return;
+    }
+
+    const helicopter = this.helicopters.get('us_huey');
+    if (!helicopter) {
+      console.log('🚁 DEBUG: No helicopter found in map');
+      return;
+    }
+
+    // If player is in helicopter, don't show interaction prompt
+    if (this.playerController.isInHelicopter()) {
+      if (this.isPlayerNearHelicopter) {
+        this.isPlayerNearHelicopter = false;
+        this.hudSystem.hideInteractionPrompt();
+      }
+      return;
+    }
+
+    // Get player position from camera (PlayerController uses camera position)
+    const playerPosition = this.playerController.getPosition();
+    if (!playerPosition) {
+      console.log('🚁 DEBUG: No player position available');
+      return;
+    }
+
+    const helicopterPosition = helicopter.position;
+
+    // Use horizontal distance (X,Z) so it works when player is on top of helicopter
+    const horizontalDistance = Math.sqrt(
+      Math.pow(playerPosition.x - helicopterPosition.x, 2) +
+      Math.pow(playerPosition.z - helicopterPosition.z, 2)
+    );
+
+    // Always log distance for debugging
+    if (Math.random() < 0.1) { // Log 10% of the time to avoid spam
+      const fullDistance = playerPosition.distanceTo(helicopterPosition);
+      console.log(`🚁 DEBUG: Player pos: (${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)}), Helicopter pos: (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)}), Horizontal distance: ${horizontalDistance.toFixed(1)}m, 3D distance: ${fullDistance.toFixed(1)}m`);
+    }
+
+    const isNearNow = horizontalDistance <= this.interactionRadius;
+
+    // Only update UI if proximity state changed
+    if (isNearNow !== this.isPlayerNearHelicopter) {
+      this.isPlayerNearHelicopter = isNearNow;
+
+      if (this.isPlayerNearHelicopter) {
+        console.log(`🚁 ⚡ Player near helicopter (${horizontalDistance.toFixed(1)}m horizontal) - SHOWING PROMPT!`);
+        this.hudSystem.showInteractionPrompt('Press E to enter helicopter');
+      } else {
+        console.log('🚁 ⚡ Player left helicopter area - HIDING PROMPT!');
+        this.hudSystem.hideInteractionPrompt();
+      }
+    }
+  }
+
+  // Helicopter entry/exit methods
+  tryEnterHelicopter(): void {
+    if (!this.playerController) {
+      console.warn('🚁 Cannot enter helicopter - no player controller');
+      return;
+    }
+
+    // Check if player is already in a helicopter
+    if (this.playerController.isInHelicopter()) {
+      console.log('🚁 Player is already in a helicopter');
+      return;
+    }
+
+    const helicopter = this.helicopters.get('us_huey');
+    if (!helicopter) {
+      console.log('🚁 No helicopter available for entry');
+      return;
+    }
+
+    // Check if player is close enough
+    const playerPosition = this.playerController.getPosition();
+    if (!playerPosition) {
+      console.warn('🚁 Cannot get player position for helicopter entry');
+      return;
+    }
+
+    const helicopterPosition = helicopter.position;
+    const horizontalDistance = Math.sqrt(
+      Math.pow(playerPosition.x - helicopterPosition.x, 2) +
+      Math.pow(playerPosition.z - helicopterPosition.z, 2)
+    );
+
+    if (horizontalDistance > this.interactionRadius) {
+      console.log(`🚁 Player too far from helicopter (${horizontalDistance.toFixed(1)}m) - must be within ${this.interactionRadius}m`);
+      return;
+    }
+
+    // Enter the helicopter
+    console.log(`🚁 ⚡ PLAYER ENTERING HELICOPTER!`);
+    this.playerController.enterHelicopter('us_huey', helicopterPosition.clone());
+
+    // Hide interaction prompt
+    if (this.hudSystem) {
+      this.hudSystem.hideInteractionPrompt();
+    }
+  }
+
+  exitHelicopter(): void {
+    if (!this.playerController) {
+      console.warn('🚁 Cannot exit helicopter - no player controller');
+      return;
+    }
+
+    if (!this.playerController.isInHelicopter()) {
+      console.log('🚁 Player is not in a helicopter');
+      return;
+    }
+
+    const helicopterId = this.playerController.getHelicopterId();
+    const helicopter = helicopterId ? this.helicopters.get(helicopterId) : null;
+
+    if (!helicopter) {
+      console.warn('🚁 Cannot find helicopter for exit');
+      return;
+    }
+
+    // Calculate exit position (beside the helicopter door)
+    const helicopterPosition = helicopter.position;
+    const exitPosition = helicopterPosition.clone();
+    exitPosition.x += 3; // Move 3 units to the right (door side)
+    exitPosition.y = helicopterPosition.y; // Same height as helicopter
+
+    // Make sure exit position is above terrain
+    if (this.terrainManager) {
+      const terrainHeight = this.terrainManager.getHeightAt(exitPosition.x, exitPosition.z);
+      exitPosition.y = Math.max(exitPosition.y, terrainHeight + 1.5); // Player height above terrain
+    }
+
+    console.log(`🚁 ⚡ PLAYER EXITING HELICOPTER!`);
+    this.playerController.exitHelicopter(exitPosition);
   }
 
   dispose(): void {

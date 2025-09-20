@@ -9,6 +9,10 @@ export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
   private chunkManager?: ImprovedChunkManager;
   private gameModeManager?: GameModeManager;
+  private helicopterModel?: any;
+  private firstPersonWeapon?: any;
+  private hudSystem?: any;
+  private sandboxRenderer?: any;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -20,6 +24,11 @@ export class PlayerController implements GameSystem {
   private pitch = 0;
   private yaw = Math.PI; // Face toward negative X (opposite of yaw=0)
   private maxPitch = Math.PI / 2 - 0.1; // Prevent full vertical rotation
+
+  // Helicopter camera settings - chase cam style
+  private helicopterCameraDistance = 25; // Distance behind helicopter for full view
+  private helicopterCameraHeight = 8; // Height above helicopter for good overview
+  private helicopterCameraAngle = -0.1; // Very slight downward angle
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -34,7 +43,9 @@ export class PlayerController implements GameSystem {
       isGrounded: false,
       isJumping: false,
       jumpForce: 12,
-      gravity: -25
+      gravity: -25,
+      isInHelicopter: false,
+      helicopterId: null
     };
 
     this.setupEventListeners();
@@ -56,10 +67,18 @@ export class PlayerController implements GameSystem {
     if (!this.isControlsEnabled) return; // Skip updates when dead
     this.updateMovement(deltaTime);
     this.updateCamera();
-    
+    this.updateHUD();
+
     // Update chunk manager with player position
     if (this.chunkManager) {
       this.chunkManager.updatePlayerPosition(this.playerState.position);
+    }
+  }
+
+  private updateHUD(): void {
+    // Update elevation display
+    if (this.hudSystem) {
+      this.hudSystem.updateElevation(this.playerState.position.y);
     }
   }
 
@@ -107,7 +126,25 @@ export class PlayerController implements GameSystem {
     }
 
     if (event.code === 'Escape') {
-      document.exitPointerLock();
+      // If in helicopter, exit helicopter first
+      if (this.playerState.isInHelicopter && this.helicopterModel) {
+        this.helicopterModel.exitHelicopter();
+      } else {
+        document.exitPointerLock();
+      }
+    }
+
+    // Handle helicopter entry/exit with E key
+    if (event.code === 'KeyE') {
+      if (this.helicopterModel) {
+        if (this.playerState.isInHelicopter) {
+          // Exit helicopter
+          this.helicopterModel.exitHelicopter();
+        } else {
+          // Try to enter helicopter if near one
+          this.helicopterModel.tryEnterHelicopter();
+        }
+      }
     }
   }
 
@@ -158,6 +195,12 @@ export class PlayerController implements GameSystem {
   }
 
   private updateMovement(deltaTime: number): void {
+    // Don't allow movement when in helicopter
+    if (this.playerState.isInHelicopter) {
+      this.playerState.velocity.set(0, 0, 0);
+      return;
+    }
+
     const moveVector = new THREE.Vector3();
     const currentSpeed = this.playerState.isRunning ? this.playerState.runSpeed : this.playerState.speed;
 
@@ -241,12 +284,20 @@ export class PlayerController implements GameSystem {
   }
 
   private updateCamera(): void {
+    if (this.playerState.isInHelicopter) {
+      this.updateHelicopterCamera();
+    } else {
+      this.updateFirstPersonCamera();
+    }
+  }
+
+  private updateFirstPersonCamera(): void {
     // Update camera rotation from mouse movement
     if (this.isPointerLocked) {
       this.yaw -= this.mouseMovement.x;
       this.pitch -= this.mouseMovement.y;
       this.pitch = MathUtils.clamp(this.pitch, -this.maxPitch, this.maxPitch);
-      
+
       // Reset mouse movement
       this.mouseMovement.x = 0;
       this.mouseMovement.y = 0;
@@ -259,6 +310,63 @@ export class PlayerController implements GameSystem {
 
     // Update camera position
     this.camera.position.copy(this.playerState.position);
+  }
+
+  private updateHelicopterCamera(): void {
+    // Get helicopter position
+    const helicopterId = this.playerState.helicopterId;
+    if (!helicopterId || !this.helicopterModel) {
+      // Fallback to first-person if helicopter not found
+      this.updateFirstPersonCamera();
+      return;
+    }
+
+    const helicopterPosition = this.helicopterModel.getHelicopterPosition(helicopterId);
+    if (!helicopterPosition) {
+      // Fallback to first-person if helicopter position not found
+      this.updateFirstPersonCamera();
+      return;
+    }
+
+    // Allow mouse control for helicopter camera - but with different sensitivity
+    if (this.isPointerLocked) {
+      this.yaw -= this.mouseMovement.x * 0.5; // Slower sensitivity for helicopter cam
+      this.pitch -= this.mouseMovement.y * 0.5;
+      this.pitch = MathUtils.clamp(this.pitch, -this.maxPitch * 0.7, this.maxPitch * 0.7); // Less vertical range
+
+      // Reset mouse movement
+      this.mouseMovement.x = 0;
+      this.mouseMovement.y = 0;
+    }
+
+    // Chase cam style: Camera always stays behind helicopter
+    // For now, helicopter faces forward (negative X direction), so camera goes to positive X (behind)
+    // Future: This will work with helicopter rotation using helicopter's transform matrix
+
+    const distanceBack = this.helicopterCameraDistance;
+    const heightAbove = this.helicopterCameraHeight;
+
+    // Position camera behind helicopter (positive X since helicopter faces negative X)
+    const cameraPosition = new THREE.Vector3(
+      helicopterPosition.x + distanceBack, // Behind helicopter (helicopter faces -X, so camera at +X)
+      helicopterPosition.y + heightAbove,  // Above helicopter
+      helicopterPosition.z                 // Same Z as helicopter
+    );
+
+    // Set camera position
+    this.camera.position.copy(cameraPosition);
+
+    // Chase cam: Camera looks at helicopter center from behind
+    const lookTarget = helicopterPosition.clone();
+    lookTarget.y += 2; // Look at helicopter center/body, not skids
+
+    // Use lookAt to always face the helicopter from behind
+    this.camera.lookAt(lookTarget);
+
+    // Apply very slight downward tilt for better perspective
+    this.camera.rotation.x += this.helicopterCameraAngle;
+
+    console.log(`🚁 📹 Helicopter camera: pos(${cameraPosition.x.toFixed(1)}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(1)}) looking at heli(${lookTarget.x.toFixed(1)}, ${lookTarget.y.toFixed(1)}, ${lookTarget.z.toFixed(1)})`);
   }
 
   // Apply recoil to camera by adjusting internal yaw/pitch so effect persists
@@ -338,6 +446,42 @@ Escape - Release pointer lock
     this.gameModeManager = gameModeManager;
   }
 
+  setHelicopterModel(helicopterModel: any): void {
+    this.helicopterModel = helicopterModel;
+  }
+
+  setFirstPersonWeapon(firstPersonWeapon: any): void {
+    this.firstPersonWeapon = firstPersonWeapon;
+  }
+
+  setHUDSystem(hudSystem: any): void {
+    this.hudSystem = hudSystem;
+  }
+
+  setSandboxRenderer(sandboxRenderer: any): void {
+    this.sandboxRenderer = sandboxRenderer;
+  }
+
+  equipWeapon(): void {
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.showWeapon();
+      this.firstPersonWeapon.setFireingEnabled(true);
+    }
+    if (this.sandboxRenderer) {
+      this.sandboxRenderer.showCrosshairAgain();
+    }
+  }
+
+  unequipWeapon(): void {
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.hideWeapon();
+      this.firstPersonWeapon.setFireingEnabled(false);
+    }
+    if (this.sandboxRenderer) {
+      this.sandboxRenderer.hideCrosshair();
+    }
+  }
+
   private getSpawnPosition(): THREE.Vector3 {
     if (!this.gameModeManager) {
       return new THREE.Vector3(0, 5, -50); // Default fallback
@@ -363,5 +507,51 @@ Escape - Release pointer lock
     // Fallback to default
     console.warn('Could not find US main HQ, using default spawn');
     return new THREE.Vector3(0, 5, -50);
+  }
+
+  // Helicopter state management
+  enterHelicopter(helicopterId: string, helicopterPosition: THREE.Vector3): void {
+    console.log(`🚁 ⚡ ENTERING HELICOPTER: ${helicopterId}`);
+    this.playerState.isInHelicopter = true;
+    this.playerState.helicopterId = helicopterId;
+
+    // Teleport player to helicopter position
+    this.setPosition(helicopterPosition);
+
+    // Stop all movement
+    this.playerState.velocity.set(0, 0, 0);
+    this.playerState.isRunning = false;
+    this.keys.clear();
+
+    // Unequip weapon when entering helicopter
+    this.unequipWeapon();
+
+    console.log(`🚁 Player entered helicopter at position (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)})`);
+    console.log(`🚁 📹 CAMERA MODE: Switched to helicopter camera (flight sim style)`);
+  }
+
+  exitHelicopter(exitPosition: THREE.Vector3): void {
+    const helicopterId = this.playerState.helicopterId;
+    console.log(`🚁 ⚡ EXITING HELICOPTER: ${helicopterId}`);
+
+    this.playerState.isInHelicopter = false;
+    this.playerState.helicopterId = null;
+
+    // Teleport player to exit position
+    this.setPosition(exitPosition);
+
+    // Equip weapon when exiting helicopter
+    this.equipWeapon();
+
+    console.log(`🚁 Player exited helicopter to position (${exitPosition.x.toFixed(1)}, ${exitPosition.y.toFixed(1)}, ${exitPosition.z.toFixed(1)})`);
+    console.log(`🚁 📹 CAMERA MODE: Switched to first-person camera`);
+  }
+
+  isInHelicopter(): boolean {
+    return this.playerState.isInHelicopter;
+  }
+
+  getHelicopterId(): string | null {
+    return this.playerState.helicopterId;
   }
 }

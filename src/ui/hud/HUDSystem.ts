@@ -114,4 +114,19 @@ export class HUDSystem implements GameSystem {
   updateAmmoDisplay(magazine: number, reserve: number): void {
     this.elements.updateAmmoDisplay(magazine, reserve);
   }
+
+  showInteractionPrompt(text: string): void {
+    console.log('🎮 HUDSystem: showInteractionPrompt called with:', text);
+    this.elements.showInteractionPrompt(text);
+  }
+
+  hideInteractionPrompt(): void {
+    console.log('🎮 HUDSystem: hideInteractionPrompt called');
+    this.elements.hideInteractionPrompt();
+  }
+
+
+  updateElevation(elevation: number): void {
+    this.elements.updateElevation(elevation);
+  }
 }

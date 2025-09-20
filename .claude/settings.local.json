@@ -26,7 +26,14 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Read(//c/tmp/**)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(npm start)",
+      "Bash(npm install)",
+      "Bash(cmd /c:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:sbcode.net)",
+      "WebFetch(domain:www.sharpcoderblog.com)"
     ],
     "deny": [],
     "ask": []

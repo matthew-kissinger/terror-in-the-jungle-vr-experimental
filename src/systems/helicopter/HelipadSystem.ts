@@ -131,11 +131,11 @@ export class HelipadSystem implements GameSystem {
   private createHelipadGeometry(): THREE.Group {
     const helipadGroup = new THREE.Group();
 
-    // Main circular platform
+    // Main circular platform - concrete gray to contrast with olive drab helicopter
     const platformRadius = 12;
     const platformGeometry = new THREE.CylinderGeometry(platformRadius, platformRadius, 0.3, 32);
     const platformMaterial = new THREE.MeshLambertMaterial({
-      color: 0x333333,
+      color: 0x888888, // Light concrete gray (was 0x333333 dark gray)
       transparent: false,
       opacity: 1.0
     });
@@ -191,10 +191,10 @@ export class HelipadSystem implements GameSystem {
     crossBar.position.set(0, 0.17, 0);
     helipadGroup.add(crossBar);
 
-    // Add support pillars
+    // Add support pillars - match concrete theme
     const pillarGeometry = new THREE.CylinderGeometry(0.8, 0.8, 8, 8);
     const pillarMaterial = new THREE.MeshLambertMaterial({
-      color: 0x666666
+      color: 0x777777 // Slightly darker concrete gray for pillars
     });
 
     // Place 4 support pillars

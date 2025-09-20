@@ -2,9 +2,11 @@
 
 This document outlines a step-by-step approach to implement helicopters directly into the main game, with each step being fully testable before proceeding.
 
-## Current Status: Step 2 Complete ✅ (With Improvements)
+## Current Status: Step 4 Complete ✅ (Basic Entry/Exit System)
 - **Step 1: HelipadSystem** ✅ Complete - Functional helipad with collision detection
 - **Step 2: HelicopterModel** ✅ Complete - Refined UH-1 Huey design with authentic geometry
+- **Step 3: Entry Detection** ✅ Complete - Proximity detection and UI interaction prompt
+- **Step 4: Entry/Exit System** ✅ Complete - E key entry/exit with teleportation and state management
 
 ### Step 1 Achievements ✅
 - **HelipadSystem created** and integrated into the main game
@@ -26,6 +28,33 @@ This document outlines a step-by-step approach to implement helicopters directly
 - **Military authenticity** - Vietnam-era olive drab colors, US Army star markings
 - **Robust loading** - Fixed race conditions with terrain chunk validation
 - **Ready for Step 3** - Helicopter positioned on helipad with collision, ready for interaction
+
+### Step 3 Achievements ✅ (Helicopter Entry Detection)
+- **Proximity detection system** - Horizontal distance detection (5m radius around helicopter)
+- **UI interaction prompt** - "Press E to enter helicopter" with professional styling
+- **Pulse animation effect** - Smooth border animation draws attention to prompt
+- **Smart positioning** - Helicopter sits properly on helipad surface (no floating)
+- **Robust distance calculation** - Works when player is beside, on top of, or around helicopter
+- **Clean state management** - Prompt only updates when proximity state changes
+- **System integration** - HelicopterModel ↔ PlayerController ↔ HUDSystem connections
+- **Debug logging** - Comprehensive logging system for troubleshooting
+- **TypeScript compliance** - All code compiles without errors
+- **Ready for Step 4** - Entry detection fully functional, ready for actual entry/exit system
+
+### Step 4 Achievements ✅ (Basic Entry/Exit System)
+- **PlayerState extension** - Added `isInHelicopter` and `helicopterId` fields to track helicopter state
+- **E key entry detection** - Press E near helicopter to enter (within 5m radius)
+- **Player teleportation** - Player position moves to helicopter center when entering
+- **Movement restriction** - Player movement disabled when inside helicopter
+- **Exit mechanism** - Press E or ESC to exit helicopter
+- **Smart exit positioning** - Player exits beside helicopter door (3 units to the right)
+- **Terrain-aware exit** - Exit position respects terrain height (player spawns above ground)
+- **State management** - Clean transitions between on-foot and in-helicopter modes
+- **UI integration** - Interaction prompt hidden when player is inside helicopter
+- **Comprehensive logging** - Debug logs for entry, exit, and state changes
+- **System connections** - PlayerController ↔ HelicopterModel bidirectional communication
+- **TypeScript compliance** - All new code compiles without errors
+- **Ready for Step 5** - Entry/exit system complete, ready for helicopter camera system
 
 ## Adding More Features
 To add new helicopter features, follow this pattern:
@@ -92,17 +121,33 @@ To add new helicopter features, follow this pattern:
 - ✅ Iconic Vietnam-era military aesthetic
 - ✅ Proper scale (fits well on 12m helipad)
 
-### Step 3: Helicopter Entry Detection
+### Step 3: Helicopter Entry Detection ✅ COMPLETE
 **Goal**: Show interaction prompt when player is near helicopter
-**Testable**: "Press E to enter helicopter" appears when close to helicopter
-**Files to modify**:
-- Add collision detection for player proximity to helicopter
-- Add UI prompt system for helicopter entry
-- No actual entry yet, just the prompt
-**Test criteria**:
-- Prompt appears when player is near helicopter
-- Prompt disappears when player moves away
-- Prompt looks good and is readable
+**Status**: ✅ COMPLETE - All test criteria met
+**Files modified**:
+- `src/systems/helicopter/HelicopterModel.ts` - Added proximity detection and HUD integration
+- `src/ui/hud/HUDElements.ts` - Added interaction prompt element with styling
+- `src/ui/hud/HUDSystem.ts` - Added show/hide methods for interaction prompt
+- `src/ui/hud/HUDStyles.ts` - Added pulse animation CSS for prompt
+- `src/systems/player/PlayerController.ts` - Added getPosition method
+- `src/core/SandboxSystemManager.ts` - Connected HelicopterModel to PlayerController and HUD
+**Features implemented**:
+- Horizontal proximity detection with 5-meter interaction radius around helicopter center
+- Styled interaction prompt with "Press E to enter helicopter" text and pulse animation
+- Smart helicopter positioning (sits on helipad surface, no floating above)
+- Robust distance calculation using horizontal distance (X,Z) instead of 3D distance
+- State management prevents UI spam when player moves around boundary radius
+- Automatic prompt hiding when player moves away from helicopter
+- Comprehensive debug logging system for development and troubleshooting
+- Full integration with existing HUD architecture and styling system
+**Test criteria**: ✅ All passed
+- ✅ Prompt appears when player is near helicopter (within 5 meters horizontally)
+- ✅ Prompt works when player is beside, on top of, or around helicopter
+- ✅ Prompt disappears smoothly when player moves away
+- ✅ Helicopter sits properly on helipad without floating
+- ✅ Professional styling with pulse animation effect
+- ✅ No console errors or performance issues
+- ✅ Debug logs provide clear feedback for development
 
 ### Step 4: Basic Entry/Exit System
 **Goal**: Player can press E to enter helicopter (teleport inside)
@@ -205,13 +250,16 @@ To add new helicopter features, follow this pattern:
 - **System Architecture**: Clean integration following existing patterns in SandboxSystemManager
 - **Material Property Handling**: Proper Three.js material configuration for solid appearance
 
-### Recent Technical Improvements (Step 2 Refinements)
+### Recent Technical Improvements (Steps 2-3 Refinements)
 - **Race Condition Fixes**: Replaced non-existent `isChunkLoaded()` with proper `getChunkAt()` validation
 - **Robust Terrain Loading**: Both systems now wait for valid terrain chunks before creating objects
 - **Cockpit Redesign**: Simplified from complex multi-sphere design to clean geometric approach
 - **Authentic Tail Rotor**: Changed from 4-blade fan to proper 2-blade vertical Huey configuration
 - **TypeScript Compliance**: Fixed all compilation errors and improved type safety
 - **Glass Orientation**: Corrected window positioning for proper outward-facing visibility
+- **Smart Positioning Fix**: Helicopter now sits on helipad surface instead of floating above
+- **Distance Calculation Fix**: Changed from 3D to horizontal distance for better interaction detection
+- **UI Integration**: Added complete HUD interaction prompt system with professional styling
 
 ### Design Guidelines for Step 2 (Huey Helicopter)
 - **Authenticity**: UH-1 "Huey" proportions and iconic Vietnam-era silhouette

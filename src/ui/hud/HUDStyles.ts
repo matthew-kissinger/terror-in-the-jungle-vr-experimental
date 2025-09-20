@@ -315,6 +315,17 @@ export class HUDStyles {
       letter-spacing: 0.5px;
       transition: color 0.3s ease;
     }
+
+    /* Interaction prompt */
+    .interaction-prompt {
+      animation: pulse 2s infinite !important;
+    }
+
+    @keyframes pulse {
+      0% { border-color: rgba(255, 255, 255, 0.6); }
+      50% { border-color: rgba(255, 255, 255, 1.0); }
+      100% { border-color: rgba(255, 255, 255, 0.6); }
+    }
   `;
 
   static getInstance(): HUDStyles {

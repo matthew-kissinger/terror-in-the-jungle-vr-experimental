@@ -50,7 +50,8 @@ export class SandboxSystemManager {
   async initializeSystems(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
-    onProgress: (phase: string, progress: number) => void
+    onProgress: (phase: string, progress: number) => void,
+    sandboxRenderer?: any
   ): Promise<void> {
     console.log('🔧 Initializing game systems...');
 
@@ -95,7 +96,7 @@ export class SandboxSystemManager {
     this.helipadSystem = new HelipadSystem(scene);
     this.helicopterModel = new HelicopterModel(scene);
 
-    this.connectSystems(scene, camera);
+    this.connectSystems(scene, camera, sandboxRenderer);
 
     // Add systems to update list
     this.systems = [
@@ -131,10 +132,16 @@ export class SandboxSystemManager {
     onProgress('world', 1);
   }
 
-  private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+  private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera, sandboxRenderer?: any): void {
     // Connect systems with chunk manager
     this.playerController.setChunkManager(this.chunkManager);
     this.playerController.setGameModeManager(this.gameModeManager);
+    this.playerController.setHelicopterModel(this.helicopterModel);
+    this.playerController.setFirstPersonWeapon(this.firstPersonWeapon);
+    this.playerController.setHUDSystem(this.hudSystem);
+    if (sandboxRenderer) {
+      this.playerController.setSandboxRenderer(sandboxRenderer);
+    }
     this.combatantSystem.setChunkManager(this.chunkManager);
     this.firstPersonWeapon.setPlayerController(this.playerController);
     this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
@@ -184,6 +191,8 @@ export class SandboxSystemManager {
     // Connect helicopter model
     this.helicopterModel.setTerrainManager(this.chunkManager);
     this.helicopterModel.setHelipadSystem(this.helipadSystem);
+    this.helicopterModel.setPlayerController(this.playerController);
+    this.helicopterModel.setHUDSystem(this.hudSystem);
 
     // Connect game mode manager to systems
     this.gameModeManager.connectSystems(

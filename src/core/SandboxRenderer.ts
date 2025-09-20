@@ -280,6 +280,18 @@ export class SandboxRenderer {
     document.body.appendChild(this.crosshair);
   }
 
+  hideCrosshair(): void {
+    if (this.crosshair) {
+      this.crosshair.style.display = 'none';
+    }
+  }
+
+  showCrosshairAgain(): void {
+    if (this.crosshair) {
+      this.crosshair.style.display = 'block';
+    }
+  }
+
   showSpawnLoadingIndicator(): void {
     this.spawnLoadingDiv = document.createElement('div');
     this.spawnLoadingDiv.style.cssText = `
