@@ -21,6 +21,7 @@ import { FullMapSystem } from '../ui/map/FullMapSystem';
 import { CompassSystem } from '../ui/compass/CompassSystem';
 import { HelipadSystem } from '../systems/helicopter/HelipadSystem';
 import { HelicopterModel } from '../systems/helicopter/HelicopterModel';
+import { RadioTransmissionSystem } from '../systems/audio/RadioTransmissionSystem';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -46,6 +47,7 @@ export class SandboxSystemManager {
   public compassSystem!: CompassSystem;
   public helipadSystem!: HelipadSystem;
   public helicopterModel!: HelicopterModel;
+  public radioTransmissionSystem!: RadioTransmissionSystem;
 
   async initializeSystems(
     scene: THREE.Scene,
@@ -95,6 +97,7 @@ export class SandboxSystemManager {
     this.gameModeManager = new GameModeManager();
     this.helipadSystem = new HelipadSystem(scene);
     this.helicopterModel = new HelicopterModel(scene);
+    this.radioTransmissionSystem = new RadioTransmissionSystem();
 
     this.connectSystems(scene, camera, sandboxRenderer);
 
@@ -118,6 +121,7 @@ export class SandboxSystemManager {
       this.hudSystem,
       this.helipadSystem,
       this.helicopterModel,
+      this.radioTransmissionSystem,
       this.skybox,
       this.gameModeManager
     ];
@@ -193,6 +197,10 @@ export class SandboxSystemManager {
     this.helicopterModel.setHelipadSystem(this.helipadSystem);
     this.helicopterModel.setPlayerController(this.playerController);
     this.helicopterModel.setHUDSystem(this.hudSystem);
+    this.helicopterModel.setAudioListener(this.audioManager.getListener());
+
+    // Connect radio transmission system
+    this.radioTransmissionSystem.setAudioListener(this.audioManager.getListener());
 
     // Connect game mode manager to systems
     this.gameModeManager.connectSystems(

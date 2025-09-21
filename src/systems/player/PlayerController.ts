@@ -341,17 +341,18 @@ export class PlayerController implements GameSystem {
     } else if (this.keys.has('keys')) {
       this.helicopterControls.collective = Math.max(0.0, this.helicopterControls.collective - 2.0 * deltaTime);
     } else {
-      // Auto-stabilize collective for hover
+      // Auto-stabilize collective for hover only when enabled
       if (this.helicopterControls.autoHover) {
         this.helicopterControls.collective = THREE.MathUtils.lerp(this.helicopterControls.collective, 0.4, deltaTime * 2.0);
       }
+      // When auto-hover is off, collective decays naturally to allow descent
     }
 
     // Yaw (A/D) - tail rotor, turning
     if (this.keys.has('keya')) {
-      this.helicopterControls.yaw = Math.max(-1.0, this.helicopterControls.yaw - 3.0 * deltaTime);
+      this.helicopterControls.yaw = Math.min(1.0, this.helicopterControls.yaw + 3.0 * deltaTime); // Turn left
     } else if (this.keys.has('keyd')) {
-      this.helicopterControls.yaw = Math.min(1.0, this.helicopterControls.yaw + 3.0 * deltaTime);
+      this.helicopterControls.yaw = Math.max(-1.0, this.helicopterControls.yaw - 3.0 * deltaTime); // Turn right
     } else {
       // Return to center
       this.helicopterControls.yaw = THREE.MathUtils.lerp(this.helicopterControls.yaw, 0, deltaTime * 8.0);
@@ -359,9 +360,9 @@ export class PlayerController implements GameSystem {
 
     // Cyclic Pitch (Arrow Up/Down) - forward/backward movement
     if (this.keys.has('arrowup')) {
-      this.helicopterControls.cyclicPitch = Math.max(-1.0, this.helicopterControls.cyclicPitch - 2.0 * deltaTime);
+      this.helicopterControls.cyclicPitch = Math.min(1.0, this.helicopterControls.cyclicPitch + 2.0 * deltaTime); // Forward
     } else if (this.keys.has('arrowdown')) {
-      this.helicopterControls.cyclicPitch = Math.min(1.0, this.helicopterControls.cyclicPitch + 2.0 * deltaTime);
+      this.helicopterControls.cyclicPitch = Math.max(-1.0, this.helicopterControls.cyclicPitch - 2.0 * deltaTime); // Backward
     } else {
       // Auto-level pitch
       this.helicopterControls.cyclicPitch = THREE.MathUtils.lerp(this.helicopterControls.cyclicPitch, 0, deltaTime * 4.0);
@@ -387,9 +388,9 @@ export class PlayerController implements GameSystem {
         -1.0, 1.0
       );
 
-      // Mouse Y controls pitch (forward/backward)
+      // Mouse Y controls pitch (forward/backward) - inverted for intuitive control
       this.helicopterControls.cyclicPitch = THREE.MathUtils.clamp(
-        this.helicopterControls.cyclicPitch + this.mouseMovement.y * mouseSensitivity,
+        this.helicopterControls.cyclicPitch - this.mouseMovement.y * mouseSensitivity,
         -1.0, 1.0
       );
 
@@ -465,7 +466,7 @@ export class PlayerController implements GameSystem {
 
     if (!this.helicopterMouseControlEnabled && this.isPointerLocked) {
       // Free orbital look mode - mouse controls camera orbital position around helicopter
-      const mouseSensitivity = 0.003; // Smoother orbital movement
+      const mouseSensitivity = 0.01; // Much higher sensitivity for responsive free look
 
       this.yaw -= this.mouseMovement.x * mouseSensitivity;
       this.pitch -= this.mouseMovement.y * mouseSensitivity;
@@ -496,8 +497,8 @@ export class PlayerController implements GameSystem {
       this.camera.lookAt(lookTarget);
     } else {
       // Following mode - camera follows behind helicopter based on its rotation
-      // Helicopter model is built rotated 90 degrees, so forward is actually -Z in local space
-      const helicopterForward = new THREE.Vector3(0, 0, -1); // Local forward direction
+      // Helicopter model components are rotated 90 degrees, so forward is actually -X in local space
+      const helicopterForward = new THREE.Vector3(-1, 0, 0); // Local forward direction (negative X)
       helicopterForward.applyQuaternion(helicopterQuaternion); // Transform to world space
 
       // Camera position: behind helicopter (opposite of forward direction)
@@ -512,18 +513,8 @@ export class PlayerController implements GameSystem {
       lookTarget.y += 2;
       this.camera.lookAt(lookTarget);
 
-      // When switching back to follow mode, reset camera angles to match helicopter
-      if (this.helicopterMouseControlEnabled) {
-        // Extract yaw from helicopter quaternion for smooth camera following
-        const euler = new THREE.Euler().setFromQuaternion(helicopterQuaternion, 'YXZ');
-        this.yaw = euler.y;
-        this.pitch = 0; // Reset pitch for chase cam
-      }
+      // When in following mode, let camera naturally follow helicopter without forced reset
     }
-
-    this.camera.rotation.x += this.helicopterCameraAngle;
-
-    console.log(`🚁 📹 Helicopter camera: pos(${cameraPosition.x.toFixed(1)}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(1)}) looking at heli(${lookTarget.x.toFixed(1)}, ${lookTarget.y.toFixed(1)}, ${lookTarget.z.toFixed(1)})`);
   }
 
   // Apply recoil to camera by adjusting internal yaw/pitch so effect persists

@@ -326,6 +326,11 @@ export class AudioManager implements GameSystem {
         this.listener.setMasterVolume(currentVolume > 0 ? 0 : 1);
     }
 
+    // Get the audio listener for other systems
+    getListener(): THREE.AudioListener {
+        return this.listener;
+    }
+
     update(deltaTime: number): void {
         // Audio system doesn't need per-frame updates in this implementation
         // Three.js handles positional audio updates automatically

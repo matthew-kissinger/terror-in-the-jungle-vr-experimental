@@ -20,6 +20,11 @@ export class HelicopterModel implements GameSystem {
   private tailRotorSpeed: Map<string, number> = new Map();
   private rotorAcceleration = 5.0; // How fast rotors spin up/down
 
+  // Audio system
+  private audioListener?: THREE.AudioListener;
+  private rotorAudio: Map<string, THREE.PositionalAudio> = new Map();
+  private audioLoader = new THREE.AudioLoader();
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
@@ -42,6 +47,10 @@ export class HelicopterModel implements GameSystem {
 
   setHUDSystem(hudSystem: any): void {
     this.hudSystem = hudSystem;
+  }
+
+  setAudioListener(listener: THREE.AudioListener): void {
+    this.audioListener = listener;
   }
 
   createHelicopterWhenReady(): void {
@@ -83,6 +92,10 @@ export class HelicopterModel implements GameSystem {
     // Initialize rotor speeds
     this.mainRotorSpeed.set('us_huey', 0);
     this.tailRotorSpeed.set('us_huey', 0);
+
+    // Initialize helicopter audio
+    console.log('🚁🔊 Initializing helicopter audio for us_huey');
+    this.initializeHelicopterAudio('us_huey', helicopter);
 
     // Register helicopter for collision detection
     if ('registerCollisionObject' in this.terrainManager) {
@@ -782,6 +795,116 @@ export class HelicopterModel implements GameSystem {
     return {};
   }
 
+  // Initialize helicopter audio system
+  private initializeHelicopterAudio(helicopterId: string, helicopter: THREE.Group): void {
+    if (!this.audioListener) {
+      console.warn('🚁🔊 No audio listener available for helicopter audio');
+      return;
+    }
+
+    // Create positional audio for helicopter rotor blades
+    const rotorAudio = new THREE.PositionalAudio(this.audioListener);
+
+    // Load rotor blade audio
+    this.audioLoader.load(
+      `${import.meta.env.BASE_URL}assets/RotorBlades.ogg`,
+      (buffer) => {
+        rotorAudio.setBuffer(buffer);
+        rotorAudio.setLoop(true);
+        rotorAudio.setVolume(0.0); // Start silent
+        rotorAudio.setRefDistance(25); // Can be heard from 25 units away
+        rotorAudio.setRolloffFactor(0.8); // Less aggressive rolloff for better audibility
+        rotorAudio.setMaxDistance(100); // Ensure it can be heard at reasonable distance
+
+        // Don't start playing immediately - wait for control
+        console.log('🚁🔊 Helicopter rotor audio loaded and ready - volume:', rotorAudio.getVolume());
+      },
+      undefined,
+      (error) => {
+        console.error('🚁🔊 Failed to load helicopter rotor audio:', error);
+      }
+    );
+
+    // Attach audio to helicopter
+    helicopter.add(rotorAudio);
+    this.rotorAudio.set(helicopterId, rotorAudio);
+  }
+
+  // Update helicopter audio based on engine state
+  private updateHelicopterAudio(helicopterId: string, deltaTime: number): void {
+    const rotorAudio = this.rotorAudio.get(helicopterId);
+    const physics = this.helicopterPhysics.get(helicopterId);
+
+    if (!rotorAudio) return;
+
+    // Check if player is controlling this helicopter
+    const isPlayerControlling = this.playerController &&
+                               this.playerController.isInHelicopter() &&
+                               this.playerController.getHelicopterId() === helicopterId;
+
+    let targetVolume: number;
+    let targetPlaybackRate: number;
+
+    if (isPlayerControlling && physics) {
+      // Player is controlling - ensure audio is playing
+      if (!rotorAudio.isPlaying) {
+        rotorAudio.play();
+        console.log('🚁🔊 Starting helicopter rotor audio');
+      }
+
+      // Use physics data
+      const controls = physics.getControls();
+      const state = physics.getState();
+
+      // Calculate volume primarily based on collective (thrust)
+      const baseVolume = 0.3; // Always some idle sound
+      const thrustVolume = controls.collective * 0.7; // Thrust contributes most to volume
+      const engineVolume = state.engineRPM * 0.2; // Engine RPM adds some variation
+
+      targetVolume = Math.min(1.0, baseVolume + thrustVolume + engineVolume);
+
+      // Calculate playback rate based on total engine activity
+      const basePlaybackRate = 0.9;
+      const thrustRate = controls.collective * 0.3;
+      const rpmRate = state.engineRPM * 0.2;
+
+      targetPlaybackRate = basePlaybackRate + thrustRate + rpmRate;
+
+      // Debug logging occasionally
+      if (Math.random() < 0.02) { // 2% of frames
+        console.log(`🚁🔊 Controlled Audio: collective=${controls.collective.toFixed(2)}, RPM=${state.engineRPM.toFixed(2)}, volume=${targetVolume.toFixed(2)}, rate=${targetPlaybackRate.toFixed(2)}`);
+      }
+    } else {
+      // Helicopter not controlled - stop audio
+      if (rotorAudio.isPlaying) {
+        rotorAudio.stop();
+        console.log('🚁🔊 Stopping helicopter rotor audio');
+      }
+      targetVolume = 0.0;
+      targetPlaybackRate = 0.8;
+    }
+
+    // Faster transitions for more responsive audio
+    const volumeTransitionSpeed = 4.0 * deltaTime;
+    const rateTransitionSpeed = 3.0 * deltaTime;
+
+    // Apply smooth volume changes
+    const currentVolume = rotorAudio.getVolume();
+    const newVolume = THREE.MathUtils.lerp(currentVolume, targetVolume, volumeTransitionSpeed);
+    rotorAudio.setVolume(newVolume);
+
+    // Apply smooth playback rate changes
+    try {
+      if (rotorAudio.source) {
+        const currentRate = rotorAudio.getPlaybackRate();
+        const newRate = THREE.MathUtils.lerp(currentRate, targetPlaybackRate, rateTransitionSpeed);
+        rotorAudio.setPlaybackRate(newRate);
+      }
+    } catch (error) {
+      // Playback rate control not supported or not ready, skip
+    }
+  }
+
   // New method: Update rotor animations
   private updateRotorAnimations(deltaTime: number): void {
     this.helicopters.forEach((helicopter, id) => {
@@ -790,9 +913,9 @@ export class HelicopterModel implements GameSystem {
       let targetTailSpeed = 0;
 
       if (physics) {
-        const audioParams = physics.getEngineAudioParams();
-        // Base rotor speed from engine RPM
-        targetMainSpeed = audioParams.rpm * 15; // rad/s (realistic main rotor speed)
+        const state = physics.getState();
+        // Base rotor speed from engine RPM - more responsive
+        targetMainSpeed = state.engineRPM * 20; // Increased for more visible rotation
         targetTailSpeed = targetMainSpeed * 4.5; // Tail rotor spins faster
       }
 
@@ -823,6 +946,9 @@ export class HelicopterModel implements GameSystem {
           child.rotation.z += newTailSpeed * deltaTime;
         }
       });
+
+      // Always update helicopter audio (whether player is in it or not)
+      this.updateHelicopterAudio(id, deltaTime);
     });
   }
 
@@ -841,6 +967,15 @@ export class HelicopterModel implements GameSystem {
   }
 
   dispose(): void {
+    // Stop and dispose of audio
+    this.rotorAudio.forEach(audio => {
+      if (audio.isPlaying) {
+        audio.stop();
+      }
+      audio.disconnect();
+    });
+    this.rotorAudio.clear();
+
     this.helicopters.forEach(helicopter => {
       this.scene.remove(helicopter);
       // Dispose of all geometries and materials

@@ -24,19 +24,19 @@ export class HelicopterPhysics {
   private controls: HelicopterControls;
 
   // Physics constants (tuned for fun hybrid gameplay)
-  private readonly MASS = 2000; // kg (lighter than real UH-1 for arcade feel)
+  private readonly MASS = 1500; // kg (much lighter for arcade feel)
   private readonly GRAVITY = -9.81; // m/s²
-  private readonly MAX_LIFT_FORCE = 25000; // N (enough to lift + maneuver)
+  private readonly MAX_LIFT_FORCE = 30000; // N (balanced thrust-to-weight ratio)
   private readonly MAX_CYCLIC_FORCE = 8000; // N (horizontal movement)
   private readonly MAX_YAW_RATE = 2.0; // rad/s
   private readonly ENGINE_SPOOL_RATE = 2.0; // How fast engine responds
 
   // Arcade-style damping for stability
-  private readonly VELOCITY_DAMPING = 0.85; // Reduces oscillation
+  private readonly VELOCITY_DAMPING = 0.95; // Less aggressive damping
   private readonly ANGULAR_DAMPING = 0.8; // Prevents spinning out
   private readonly AUTO_LEVEL_STRENGTH = 3.0; // Auto-stabilization force
-  private readonly GROUND_EFFECT_HEIGHT = 10.0; // Easier flight near ground
-  private readonly GROUND_EFFECT_STRENGTH = 0.3; // Extra lift bonus
+  private readonly GROUND_EFFECT_HEIGHT = 5.0; // Reduced ground effect height
+  private readonly GROUND_EFFECT_STRENGTH = 0.1; // Much less ground effect
 
   // Input smoothing for better feel
   private readonly INPUT_SMOOTH_RATE = 8.0; // How fast inputs respond
@@ -129,7 +129,7 @@ export class HelicopterPhysics {
 
   private updateEngine(deltaTime: number): void {
     // Engine RPM follows collective input with realistic spool-up/down
-    const targetRPM = Math.max(0.3, this.smoothedControls.collective); // Idle at 30%
+    const targetRPM = Math.max(0.1, this.smoothedControls.collective); // Idle at 10%
     const spoolRate = this.ENGINE_SPOOL_RATE * deltaTime;
 
     if (targetRPM > this.state.engineRPM) {
@@ -163,10 +163,11 @@ export class HelicopterPhysics {
     const lift = new THREE.Vector3(0, liftForce, 0);
 
     // Horizontal forces from cyclic (relative to helicopter orientation)
+    // With 90-degree model rotation, forward is -X, right is -Z in local space
     const cyclicForce = new THREE.Vector3(
-      this.smoothedControls.cyclicRoll * this.MAX_CYCLIC_FORCE,
+      -this.smoothedControls.cyclicPitch * this.MAX_CYCLIC_FORCE, // Forward/backward on -X-axis
       0,
-      -this.smoothedControls.cyclicPitch * this.MAX_CYCLIC_FORCE // Negative for forward
+      -this.smoothedControls.cyclicRoll * this.MAX_CYCLIC_FORCE   // Left/right on -Z-axis
     );
 
     // Transform cyclic forces to world space
@@ -178,6 +179,10 @@ export class HelicopterPhysics {
     // Apply force to velocity (F = ma, so a = F/m)
     const acceleration = totalForce.divideScalar(this.MASS);
     this.state.velocity.add(acceleration.multiplyScalar(deltaTime));
+
+    // Cap maximum vertical velocity for better control
+    const maxVerticalSpeed = 15.0; // m/s maximum climb/descent rate
+    this.state.velocity.y = THREE.MathUtils.clamp(this.state.velocity.y, -maxVerticalSpeed, maxVerticalSpeed);
 
     // Yaw angular velocity from tail rotor
     this.state.angularVelocity.y = this.smoothedControls.yaw * this.MAX_YAW_RATE;
@@ -195,9 +200,9 @@ export class HelicopterPhysics {
     this.state.angularVelocity.z += rollCorrection * deltaTime;
     this.state.angularVelocity.x += pitchCorrection * deltaTime;
 
-    // Hover assistance - counter small vertical movements
-    if (Math.abs(this.state.velocity.y) < 2.0) {
-      this.state.velocity.y *= 0.9; // Gentle vertical damping when hovering
+    // Hover assistance - only apply when auto-hover is on and collective is near hover point
+    if (Math.abs(this.state.velocity.y) < 1.0 && Math.abs(this.smoothedControls.collective - 0.5) < 0.1) {
+      this.state.velocity.y *= 0.95; // Very gentle vertical damping only when actively hovering
     }
   }
 

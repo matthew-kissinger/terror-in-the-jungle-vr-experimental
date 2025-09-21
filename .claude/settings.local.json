@@ -33,7 +33,9 @@
       "mcp__ide__getDiagnostics",
       "Bash(git checkout:*)",
       "WebFetch(domain:sbcode.net)",
-      "WebFetch(domain:www.sharpcoderblog.com)"
+      "WebFetch(domain:www.sharpcoderblog.com)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []
