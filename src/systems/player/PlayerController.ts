@@ -4,11 +4,16 @@ import { MathUtils } from '../../utils/Math';
 import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { GameModeManager } from '../world/GameModeManager';
 import { Faction } from '../combat/types';
+import { HelicopterControls } from '../helicopter/HelicopterPhysics';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
   private chunkManager?: ImprovedChunkManager;
   private gameModeManager?: GameModeManager;
+  private helicopterModel?: any;
+  private firstPersonWeapon?: any;
+  private hudSystem?: any;
+  private sandboxRenderer?: any;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -20,6 +25,24 @@ export class PlayerController implements GameSystem {
   private pitch = 0;
   private yaw = Math.PI; // Face toward negative X (opposite of yaw=0)
   private maxPitch = Math.PI / 2 - 0.1; // Prevent full vertical rotation
+
+  // Helicopter camera settings - chase cam style
+  private helicopterCameraDistance = 25; // Distance behind helicopter for full view
+  private helicopterCameraHeight = 8; // Height above helicopter for good overview
+  private helicopterCameraAngle = -0.1; // Very slight downward angle
+
+  // Helicopter controls state
+  private helicopterControls: HelicopterControls = {
+    collective: 0,
+    cyclicPitch: 0,
+    cyclicRoll: 0,
+    yaw: 0,
+    engineBoost: false,
+    autoHover: true
+  };
+
+  // Mouse control mode for helicopter
+  private helicopterMouseControlEnabled = true; // True = mouse affects controls, False = free orbital look
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -34,7 +57,9 @@ export class PlayerController implements GameSystem {
       isGrounded: false,
       isJumping: false,
       jumpForce: 12,
-      gravity: -25
+      gravity: -25,
+      isInHelicopter: false,
+      helicopterId: null
     };
 
     this.setupEventListeners();
@@ -54,12 +79,26 @@ export class PlayerController implements GameSystem {
 
   update(deltaTime: number): void {
     if (!this.isControlsEnabled) return; // Skip updates when dead
-    this.updateMovement(deltaTime);
+
+    if (this.playerState.isInHelicopter) {
+      this.updateHelicopterControls(deltaTime);
+    } else {
+      this.updateMovement(deltaTime);
+    }
+
     this.updateCamera();
-    
+    this.updateHUD();
+
     // Update chunk manager with player position
     if (this.chunkManager) {
       this.chunkManager.updatePlayerPosition(this.playerState.position);
+    }
+  }
+
+  private updateHUD(): void {
+    // Update elevation display
+    if (this.hudSystem) {
+      this.hudSystem.updateElevation(this.playerState.position.y);
     }
   }
 
@@ -107,15 +146,62 @@ export class PlayerController implements GameSystem {
     }
 
     if (event.code === 'Escape') {
-      document.exitPointerLock();
+      // If in helicopter, exit helicopter first
+      if (this.playerState.isInHelicopter && this.helicopterModel) {
+        this.helicopterModel.exitHelicopter();
+      } else {
+        document.exitPointerLock();
+      }
+    }
+
+    // Handle helicopter entry/exit with E key
+    if (event.code === 'KeyE') {
+      if (this.helicopterModel) {
+        if (this.playerState.isInHelicopter) {
+          // Exit helicopter
+          this.helicopterModel.exitHelicopter();
+        } else {
+          // Try to enter helicopter if near one
+          this.helicopterModel.tryEnterHelicopter();
+        }
+      }
+    }
+
+    // Helicopter-specific controls
+    if (this.playerState.isInHelicopter) {
+      // Toggle auto-hover with Space
+      if (event.code === 'Space') {
+        this.helicopterControls.autoHover = !this.helicopterControls.autoHover;
+        console.log(`🚁 Auto-hover ${this.helicopterControls.autoHover ? 'enabled' : 'disabled'}`);
+      }
+
+      // Engine boost with Shift
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        this.helicopterControls.engineBoost = true;
+      }
+
+      // Toggle mouse control mode with Right Ctrl
+      if (event.code === 'ControlRight') {
+        this.helicopterMouseControlEnabled = !this.helicopterMouseControlEnabled;
+        console.log(`🚁 Mouse control ${this.helicopterMouseControlEnabled ? 'enabled (affects controls)' : 'disabled (free orbital look)'}`);
+
+        // Update HUD indicator
+        if (this.hudSystem) {
+          this.hudSystem.updateHelicopterMouseMode(this.helicopterMouseControlEnabled);
+        }
+      }
     }
   }
 
   private onKeyUp(event: KeyboardEvent): void {
     this.keys.delete(event.code.toLowerCase());
-    
+
     if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
       this.playerState.isRunning = false;
+      // Also disable helicopter engine boost
+      if (this.playerState.isInHelicopter) {
+        this.helicopterControls.engineBoost = false;
+      }
     }
   }
 
@@ -158,6 +244,12 @@ export class PlayerController implements GameSystem {
   }
 
   private updateMovement(deltaTime: number): void {
+    // Don't allow movement when in helicopter
+    if (this.playerState.isInHelicopter) {
+      this.playerState.velocity.set(0, 0, 0);
+      return;
+    }
+
     const moveVector = new THREE.Vector3();
     const currentSpeed = this.playerState.isRunning ? this.playerState.runSpeed : this.playerState.speed;
 
@@ -222,8 +314,8 @@ export class PlayerController implements GameSystem {
     // Check ground collision using ImprovedChunkManager if available, otherwise use flat baseline
     let groundHeight = 2; // Default player height above ground (flat world fallback)
     if (this.chunkManager) {
-      const terrainHeight = this.chunkManager.getHeightAt(newPosition.x, newPosition.z);
-      groundHeight = terrainHeight + 2;
+      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(newPosition.x, newPosition.z);
+      groundHeight = effectiveHeight + 2;
     }
     
     if (newPosition.y <= groundHeight) {
@@ -240,13 +332,104 @@ export class PlayerController implements GameSystem {
     this.playerState.position.copy(newPosition);
   }
 
+  private updateHelicopterControls(deltaTime: number): void {
+    // Update helicopter controls based on keyboard input
+
+    // Collective (W/S) - vertical thrust
+    if (this.keys.has('keyw')) {
+      this.helicopterControls.collective = Math.min(1.0, this.helicopterControls.collective + 2.0 * deltaTime);
+    } else if (this.keys.has('keys')) {
+      this.helicopterControls.collective = Math.max(0.0, this.helicopterControls.collective - 2.0 * deltaTime);
+    } else {
+      // Auto-stabilize collective for hover only when enabled
+      if (this.helicopterControls.autoHover) {
+        this.helicopterControls.collective = THREE.MathUtils.lerp(this.helicopterControls.collective, 0.4, deltaTime * 2.0);
+      }
+      // When auto-hover is off, collective decays naturally to allow descent
+    }
+
+    // Yaw (A/D) - tail rotor, turning
+    if (this.keys.has('keya')) {
+      this.helicopterControls.yaw = Math.min(1.0, this.helicopterControls.yaw + 3.0 * deltaTime); // Turn left
+    } else if (this.keys.has('keyd')) {
+      this.helicopterControls.yaw = Math.max(-1.0, this.helicopterControls.yaw - 3.0 * deltaTime); // Turn right
+    } else {
+      // Return to center
+      this.helicopterControls.yaw = THREE.MathUtils.lerp(this.helicopterControls.yaw, 0, deltaTime * 8.0);
+    }
+
+    // Cyclic Pitch (Arrow Up/Down) - forward/backward movement
+    if (this.keys.has('arrowup')) {
+      this.helicopterControls.cyclicPitch = Math.min(1.0, this.helicopterControls.cyclicPitch + 2.0 * deltaTime); // Forward
+    } else if (this.keys.has('arrowdown')) {
+      this.helicopterControls.cyclicPitch = Math.max(-1.0, this.helicopterControls.cyclicPitch - 2.0 * deltaTime); // Backward
+    } else {
+      // Auto-level pitch
+      this.helicopterControls.cyclicPitch = THREE.MathUtils.lerp(this.helicopterControls.cyclicPitch, 0, deltaTime * 4.0);
+    }
+
+    // Cyclic Roll (Arrow Left/Right) - left/right banking
+    if (this.keys.has('arrowleft')) {
+      this.helicopterControls.cyclicRoll = Math.max(-1.0, this.helicopterControls.cyclicRoll - 2.0 * deltaTime);
+    } else if (this.keys.has('arrowright')) {
+      this.helicopterControls.cyclicRoll = Math.min(1.0, this.helicopterControls.cyclicRoll + 2.0 * deltaTime);
+    } else {
+      // Auto-level roll
+      this.helicopterControls.cyclicRoll = THREE.MathUtils.lerp(this.helicopterControls.cyclicRoll, 0, deltaTime * 4.0);
+    }
+
+    // Add mouse control input when enabled
+    if (this.helicopterMouseControlEnabled && this.isPointerLocked) {
+      const mouseSensitivity = 0.5;
+
+      // Mouse X controls roll (banking)
+      this.helicopterControls.cyclicRoll = THREE.MathUtils.clamp(
+        this.helicopterControls.cyclicRoll + this.mouseMovement.x * mouseSensitivity,
+        -1.0, 1.0
+      );
+
+      // Mouse Y controls pitch (forward/backward) - inverted for intuitive control
+      this.helicopterControls.cyclicPitch = THREE.MathUtils.clamp(
+        this.helicopterControls.cyclicPitch - this.mouseMovement.y * mouseSensitivity,
+        -1.0, 1.0
+      );
+
+      // Clear mouse movement since we've used it for controls
+      this.mouseMovement.x = 0;
+      this.mouseMovement.y = 0;
+    }
+
+    // Send controls to helicopter model
+    if (this.helicopterModel && this.playerState.helicopterId) {
+      this.helicopterModel.setHelicopterControls(this.playerState.helicopterId, this.helicopterControls);
+    }
+
+    // Update helicopter instruments HUD
+    if (this.hudSystem) {
+      this.hudSystem.updateHelicopterInstruments(
+        this.helicopterControls.collective,
+        this.helicopterControls.collective * 0.8 + 0.2, // Simple RPM simulation based on collective
+        this.helicopterControls.autoHover,
+        this.helicopterControls.engineBoost
+      );
+    }
+  }
+
   private updateCamera(): void {
+    if (this.playerState.isInHelicopter) {
+      this.updateHelicopterCamera();
+    } else {
+      this.updateFirstPersonCamera();
+    }
+  }
+
+  private updateFirstPersonCamera(): void {
     // Update camera rotation from mouse movement
     if (this.isPointerLocked) {
       this.yaw -= this.mouseMovement.x;
       this.pitch -= this.mouseMovement.y;
       this.pitch = MathUtils.clamp(this.pitch, -this.maxPitch, this.maxPitch);
-      
+
       // Reset mouse movement
       this.mouseMovement.x = 0;
       this.mouseMovement.y = 0;
@@ -259,6 +442,79 @@ export class PlayerController implements GameSystem {
 
     // Update camera position
     this.camera.position.copy(this.playerState.position);
+  }
+
+  private updateHelicopterCamera(): void {
+    // Get helicopter position and rotation
+    const helicopterId = this.playerState.helicopterId;
+    if (!helicopterId || !this.helicopterModel) {
+      // Fallback to first-person if helicopter not found
+      this.updateFirstPersonCamera();
+      return;
+    }
+
+    const helicopterPosition = this.helicopterModel.getHelicopterPosition(helicopterId);
+    const helicopterQuaternion = this.helicopterModel.getHelicopterQuaternion(helicopterId);
+    if (!helicopterPosition || !helicopterQuaternion) {
+      // Fallback to first-person if helicopter data not found
+      this.updateFirstPersonCamera();
+      return;
+    }
+
+    const distanceBack = this.helicopterCameraDistance;
+    const heightAbove = this.helicopterCameraHeight;
+
+    if (!this.helicopterMouseControlEnabled && this.isPointerLocked) {
+      // Free orbital look mode - mouse controls camera orbital position around helicopter
+      const mouseSensitivity = 0.01; // Much higher sensitivity for responsive free look
+
+      this.yaw -= this.mouseMovement.x * mouseSensitivity;
+      this.pitch -= this.mouseMovement.y * mouseSensitivity;
+
+      // Allow full 360-degree horizontal rotation
+      // Clamp vertical rotation to prevent flipping (slightly above/below helicopter)
+      this.pitch = MathUtils.clamp(this.pitch, -Math.PI * 0.4, Math.PI * 0.4); // -72° to +72° vertical range
+
+      // Reset mouse movement
+      this.mouseMovement.x = 0;
+      this.mouseMovement.y = 0;
+
+      // Spherical coordinate orbital camera positioning
+      const radius = distanceBack;
+      const x = radius * Math.cos(this.pitch) * Math.sin(this.yaw);
+      const y = radius * Math.sin(this.pitch) + heightAbove; // Add base height offset
+      const z = radius * Math.cos(this.pitch) * Math.cos(this.yaw);
+
+      // Position camera in orbit around helicopter
+      const cameraPosition = new THREE.Vector3(x, y, z);
+      cameraPosition.add(helicopterPosition);
+
+      this.camera.position.copy(cameraPosition);
+
+      // Always look at helicopter center regardless of orbital position
+      const lookTarget = helicopterPosition.clone();
+      lookTarget.y += 2; // Look at helicopter body center
+      this.camera.lookAt(lookTarget);
+    } else {
+      // Following mode - camera follows behind helicopter based on its rotation
+      // Helicopter model components are rotated 90 degrees, so forward is actually -X in local space
+      const helicopterForward = new THREE.Vector3(-1, 0, 0); // Local forward direction (negative X)
+      helicopterForward.applyQuaternion(helicopterQuaternion); // Transform to world space
+
+      // Camera position: behind helicopter (opposite of forward direction)
+      const cameraPosition = helicopterPosition.clone();
+      cameraPosition.add(helicopterForward.clone().multiplyScalar(-distanceBack)); // Behind
+      cameraPosition.y += heightAbove;
+
+      this.camera.position.copy(cameraPosition);
+
+      // Look at helicopter center
+      const lookTarget = helicopterPosition.clone();
+      lookTarget.y += 2;
+      this.camera.lookAt(lookTarget);
+
+      // When in following mode, let camera naturally follow helicopter without forced reset
+    }
   }
 
   // Apply recoil to camera by adjusting internal yaw/pitch so effect persists
@@ -274,6 +530,12 @@ export class PlayerController implements GameSystem {
     this.playerState.velocity.set(0, 0, 0);
     this.playerState.isGrounded = false;
     console.log(`Player teleported to ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+  }
+
+  // Update position without affecting camera (for helicopter physics)
+  updatePlayerPosition(position: THREE.Vector3): void {
+    this.playerState.position.copy(position);
+    // Don't update camera position - let helicopter camera handle it
   }
 
   // Disable controls (for death)
@@ -305,11 +567,14 @@ export class PlayerController implements GameSystem {
   private showControls(): void {
     console.log(`
 🎮 CONTROLS:
-WASD - Move
-Shift - Run
-Space - Jump
+WASD - Move / Helicopter Controls (W/S = Collective, A/D = Yaw)
+Arrow Keys - Helicopter Cyclic (↑↓ = Pitch, ←→ = Roll)
+Shift - Run / Engine Boost (in helicopter)
+Space - Jump / Toggle Auto-Hover (in helicopter)
+Right Ctrl - Toggle Mouse Control Mode (helicopter: control vs free look)
+E - Enter/Exit Helicopter
 Mouse - Look around (click to enable pointer lock)
-Escape - Release pointer lock
+Escape - Release pointer lock / Exit helicopter
     `);
   }
 
@@ -338,6 +603,42 @@ Escape - Release pointer lock
     this.gameModeManager = gameModeManager;
   }
 
+  setHelicopterModel(helicopterModel: any): void {
+    this.helicopterModel = helicopterModel;
+  }
+
+  setFirstPersonWeapon(firstPersonWeapon: any): void {
+    this.firstPersonWeapon = firstPersonWeapon;
+  }
+
+  setHUDSystem(hudSystem: any): void {
+    this.hudSystem = hudSystem;
+  }
+
+  setSandboxRenderer(sandboxRenderer: any): void {
+    this.sandboxRenderer = sandboxRenderer;
+  }
+
+  equipWeapon(): void {
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.showWeapon();
+      this.firstPersonWeapon.setFireingEnabled(true);
+    }
+    if (this.sandboxRenderer) {
+      this.sandboxRenderer.showCrosshairAgain();
+    }
+  }
+
+  unequipWeapon(): void {
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.hideWeapon();
+      this.firstPersonWeapon.setFireingEnabled(false);
+    }
+    if (this.sandboxRenderer) {
+      this.sandboxRenderer.hideCrosshair();
+    }
+  }
+
   private getSpawnPosition(): THREE.Vector3 {
     if (!this.gameModeManager) {
       return new THREE.Vector3(0, 5, -50); // Default fallback
@@ -363,5 +664,64 @@ Escape - Release pointer lock
     // Fallback to default
     console.warn('Could not find US main HQ, using default spawn');
     return new THREE.Vector3(0, 5, -50);
+  }
+
+  // Helicopter state management
+  enterHelicopter(helicopterId: string, helicopterPosition: THREE.Vector3): void {
+    console.log(`🚁 ⚡ ENTERING HELICOPTER: ${helicopterId}`);
+    this.playerState.isInHelicopter = true;
+    this.playerState.helicopterId = helicopterId;
+
+    // Teleport player to helicopter position
+    this.setPosition(helicopterPosition);
+
+    // Stop all movement
+    this.playerState.velocity.set(0, 0, 0);
+    this.playerState.isRunning = false;
+    this.keys.clear();
+
+    // Unequip weapon when entering helicopter
+    this.unequipWeapon();
+
+    // Show helicopter mouse control indicator and instruments
+    if (this.hudSystem) {
+      this.hudSystem.showHelicopterMouseIndicator();
+      this.hudSystem.updateHelicopterMouseMode(this.helicopterMouseControlEnabled);
+      this.hudSystem.showHelicopterInstruments();
+    }
+
+    console.log(`🚁 Player entered helicopter at position (${helicopterPosition.x.toFixed(1)}, ${helicopterPosition.y.toFixed(1)}, ${helicopterPosition.z.toFixed(1)})`);
+    console.log(`🚁 📹 CAMERA MODE: Switched to helicopter camera (flight sim style)`);
+  }
+
+  exitHelicopter(exitPosition: THREE.Vector3): void {
+    const helicopterId = this.playerState.helicopterId;
+    console.log(`🚁 ⚡ EXITING HELICOPTER: ${helicopterId}`);
+
+    this.playerState.isInHelicopter = false;
+    this.playerState.helicopterId = null;
+
+    // Teleport player to exit position
+    this.setPosition(exitPosition);
+
+    // Equip weapon when exiting helicopter
+    this.equipWeapon();
+
+    // Hide helicopter mouse control indicator and instruments
+    if (this.hudSystem) {
+      this.hudSystem.hideHelicopterMouseIndicator();
+      this.hudSystem.hideHelicopterInstruments();
+    }
+
+    console.log(`🚁 Player exited helicopter to position (${exitPosition.x.toFixed(1)}, ${exitPosition.y.toFixed(1)}, ${exitPosition.z.toFixed(1)})`);
+    console.log(`🚁 📹 CAMERA MODE: Switched to first-person camera`);
+  }
+
+  isInHelicopter(): boolean {
+    return this.playerState.isInHelicopter;
+  }
+
+  getHelicopterId(): string | null {
+    return this.playerState.helicopterId;
   }
 }

@@ -114,4 +114,45 @@ export class HUDSystem implements GameSystem {
   updateAmmoDisplay(magazine: number, reserve: number): void {
     this.elements.updateAmmoDisplay(magazine, reserve);
   }
+
+  showInteractionPrompt(text: string): void {
+    console.log('🎮 HUDSystem: showInteractionPrompt called with:', text);
+    this.elements.showInteractionPrompt(text);
+  }
+
+  hideInteractionPrompt(): void {
+    console.log('🎮 HUDSystem: hideInteractionPrompt called');
+    this.elements.hideInteractionPrompt();
+  }
+
+
+  updateElevation(elevation: number): void {
+    this.elements.updateElevation(elevation);
+  }
+
+  // Helicopter mouse control indicator methods (only available in helicopter)
+  showHelicopterMouseIndicator(): void {
+    this.elements.showHelicopterMouseIndicator();
+  }
+
+  hideHelicopterMouseIndicator(): void {
+    this.elements.hideHelicopterMouseIndicator();
+  }
+
+  updateHelicopterMouseMode(controlMode: boolean): void {
+    this.elements.updateHelicopterMouseMode(controlMode);
+  }
+
+  // Helicopter instruments methods (only visible in helicopter)
+  showHelicopterInstruments(): void {
+    this.elements.showHelicopterInstruments();
+  }
+
+  hideHelicopterInstruments(): void {
+    this.elements.hideHelicopterInstruments();
+  }
+
+  updateHelicopterInstruments(collective: number, rpm: number, autoHover: boolean, engineBoost: boolean): void {
+    this.elements.updateHelicopterInstruments(collective, rpm, autoHover, engineBoost);
+  }
 }

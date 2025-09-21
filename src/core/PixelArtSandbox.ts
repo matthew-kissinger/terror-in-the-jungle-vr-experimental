@@ -82,7 +82,8 @@ export class PixelArtSandbox {
       await this.systemManager.initializeSystems(
         this.sandboxRenderer.scene,
         this.sandboxRenderer.camera,
-        (phase, progress) => this.loadingScreen.updateProgress(phase, progress)
+        (phase, progress) => this.loadingScreen.updateProgress(phase, progress),
+        this.sandboxRenderer
       );
 
       // Phase 5: Final setup

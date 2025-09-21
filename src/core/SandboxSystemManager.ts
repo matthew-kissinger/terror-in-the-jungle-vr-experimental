@@ -19,6 +19,8 @@ import { GameMode } from '../config/gameModes';
 import { PlayerRespawnManager } from '../systems/player/PlayerRespawnManager';
 import { FullMapSystem } from '../ui/map/FullMapSystem';
 import { CompassSystem } from '../ui/compass/CompassSystem';
+import { HelipadSystem } from '../systems/helicopter/HelipadSystem';
+import { HelicopterModel } from '../systems/helicopter/HelicopterModel';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -42,11 +44,14 @@ export class SandboxSystemManager {
   public playerRespawnManager!: PlayerRespawnManager;
   public fullMapSystem!: FullMapSystem;
   public compassSystem!: CompassSystem;
+  public helipadSystem!: HelipadSystem;
+  public helicopterModel!: HelicopterModel;
 
   async initializeSystems(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
-    onProgress: (phase: string, progress: number) => void
+    onProgress: (phase: string, progress: number) => void,
+    sandboxRenderer?: any
   ): Promise<void> {
     console.log('🔧 Initializing game systems...');
 
@@ -88,8 +93,10 @@ export class SandboxSystemManager {
     this.fullMapSystem = new FullMapSystem(camera);
     this.compassSystem = new CompassSystem(camera);
     this.gameModeManager = new GameModeManager();
+    this.helipadSystem = new HelipadSystem(scene);
+    this.helicopterModel = new HelicopterModel(scene);
 
-    this.connectSystems(scene, camera);
+    this.connectSystems(scene, camera, sandboxRenderer);
 
     // Add systems to update list
     this.systems = [
@@ -109,6 +116,8 @@ export class SandboxSystemManager {
       this.fullMapSystem,
       this.compassSystem,
       this.hudSystem,
+      this.helipadSystem,
+      this.helicopterModel,
       this.skybox,
       this.gameModeManager
     ];
@@ -123,10 +132,16 @@ export class SandboxSystemManager {
     onProgress('world', 1);
   }
 
-  private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+  private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera, sandboxRenderer?: any): void {
     // Connect systems with chunk manager
     this.playerController.setChunkManager(this.chunkManager);
     this.playerController.setGameModeManager(this.gameModeManager);
+    this.playerController.setHelicopterModel(this.helicopterModel);
+    this.playerController.setFirstPersonWeapon(this.firstPersonWeapon);
+    this.playerController.setHUDSystem(this.hudSystem);
+    if (sandboxRenderer) {
+      this.playerController.setSandboxRenderer(sandboxRenderer);
+    }
     this.combatantSystem.setChunkManager(this.chunkManager);
     this.firstPersonWeapon.setPlayerController(this.playerController);
     this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
@@ -167,6 +182,19 @@ export class SandboxSystemManager {
     this.playerRespawnManager.setGameModeManager(this.gameModeManager);
     this.playerRespawnManager.setPlayerController(this.playerController);
     this.playerRespawnManager.setFirstPersonWeapon(this.firstPersonWeapon);
+
+    // Connect helipad system
+    this.helipadSystem.setTerrainManager(this.chunkManager);
+    this.helipadSystem.setVegetationSystem(this.globalBillboardSystem);
+    this.helipadSystem.setGameModeManager(this.gameModeManager);
+
+    // Connect helicopter model
+    this.helicopterModel.setTerrainManager(this.chunkManager);
+    this.helicopterModel.setHelipadSystem(this.helipadSystem);
+    this.helicopterModel.setPlayerController(this.playerController);
+    this.helicopterModel.setHUDSystem(this.hudSystem);
+    this.helicopterModel.setAudioListener(this.audioManager.getListener());
+
 
     // Connect game mode manager to systems
     this.gameModeManager.connectSystems(

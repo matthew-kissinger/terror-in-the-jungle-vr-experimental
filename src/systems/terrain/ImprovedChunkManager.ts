@@ -357,6 +357,103 @@ export class ImprovedChunkManager implements GameSystem {
     return chunk ? chunk.getHeightAt(x, z) : 0;
   }
 
+  // Collision objects registry
+  private collisionObjects: Map<string, THREE.Object3D> = new Map();
+
+  /**
+   * Register an object for collision detection
+   */
+  registerCollisionObject(id: string, object: THREE.Object3D): void {
+    this.collisionObjects.set(id, object);
+    console.log(`🔷 Registered collision object: ${id}`);
+  }
+
+  /**
+   * Unregister a collision object
+   */
+  unregisterCollisionObject(id: string): void {
+    this.collisionObjects.delete(id);
+    console.log(`🔶 Unregistered collision object: ${id}`);
+  }
+
+  /**
+   * Get effective height at position, considering both terrain and collision objects
+   */
+  getEffectiveHeightAt(x: number, z: number): number {
+    let maxHeight = this.getHeightAt(x, z);
+    const terrainHeight = maxHeight;
+
+    // Check collision objects for higher surfaces
+    let objectContributions = 0;
+    this.collisionObjects.forEach((object, id) => {
+      const objectHeight = this.getObjectHeightAt(object, x, z);
+      if (objectHeight > 0) {
+        objectContributions++;
+        console.log(`🔷 Object ${id} contributes height ${objectHeight.toFixed(2)} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+      }
+      if (objectHeight > maxHeight) {
+        maxHeight = objectHeight;
+      }
+    });
+
+    if (objectContributions > 0) {
+      console.log(`🎯 Final height at (${x.toFixed(1)}, ${z.toFixed(1)}): terrain=${terrainHeight.toFixed(2)}, final=${maxHeight.toFixed(2)}`);
+    }
+
+    return maxHeight;
+  }
+
+  /**
+   * Get height of a specific object at given world position
+   */
+  private getObjectHeightAt(object: THREE.Object3D, x: number, z: number): number {
+    // Get object bounding box
+    const box = new THREE.Box3().setFromObject(object);
+
+    // Check if X,Z position is within object's horizontal bounds
+    const testPoint = new THREE.Vector3(x, 0, z);
+
+    if (x >= box.min.x && x <= box.max.x && z >= box.min.z && z <= box.max.z) {
+      // Position is within bounds - use raycasting from above to find top surface
+      const raycaster = new THREE.Raycaster();
+      const rayOrigin = new THREE.Vector3(x, box.max.y + 10, z);
+      const rayDirection = new THREE.Vector3(0, -1, 0);
+      raycaster.set(rayOrigin, rayDirection);
+
+      const intersects = raycaster.intersectObject(object, true);
+      if (intersects.length > 0) {
+        // Return the highest intersection point
+        let maxY = -Infinity;
+        for (const intersect of intersects) {
+          if (intersect.point.y > maxY) {
+            maxY = intersect.point.y;
+          }
+        }
+        return maxY;
+      }
+
+      // Fallback to bounding box max height if raycasting fails
+      return box.max.y;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Check for collision with objects at given position
+   */
+  checkObjectCollision(position: THREE.Vector3, radius: number = 0.5): boolean {
+    for (const [id, object] of this.collisionObjects) {
+      const box = new THREE.Box3().setFromObject(object);
+      const expandedBox = box.expandByScalar(radius);
+
+      if (expandedBox.containsPoint(position)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Raycast against terrain to check for obstructions
    * @param origin Starting point of the ray

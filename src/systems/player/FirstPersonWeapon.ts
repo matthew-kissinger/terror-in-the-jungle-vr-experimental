@@ -634,4 +634,30 @@ export class FirstPersonWeapon implements GameSystem {
   getAmmoState(): any {
     return this.ammoManager.getState();
   }
+
+  // Helicopter integration methods
+  hideWeapon(): void {
+    if (this.weaponRig) {
+      this.weaponRig.visible = false;
+      console.log('🚁 🔫 Weapon hidden (in helicopter)');
+    }
+  }
+
+  showWeapon(): void {
+    if (this.weaponRig) {
+      this.weaponRig.visible = true;
+      console.log('🚁 🔫 Weapon shown (exited helicopter)');
+    }
+  }
+
+  setFireingEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+    if (!enabled) {
+      // Stop any current firing
+      this.isFiring = false;
+      console.log('🚁 🔫 Firing disabled (in helicopter)');
+    } else {
+      console.log('🚁 🔫 Firing enabled (exited helicopter)');
+    }
+  }
 }
