@@ -20,6 +20,13 @@ export class HelicopterModel implements GameSystem {
   private tailRotorSpeed: Map<string, number> = new Map();
   private rotorAcceleration = 5.0; // How fast rotors spin up/down
 
+  // Visual tilt system for realistic helicopter banking
+  private visualTiltQuaternion: Map<string, THREE.Quaternion> = new Map();
+  private targetTiltQuaternion: Map<string, THREE.Quaternion> = new Map();
+  private readonly MAX_TILT_ANGLE = Math.PI / 10; // 18 degrees maximum tilt
+  private readonly TILT_SMOOTH_RATE = 6.0; // How fast tilt responds to controls
+  private readonly AUTO_LEVEL_RATE = 3.0; // How fast it returns to level
+
   // Audio system
   private audioListener?: THREE.AudioListener;
   private rotorAudio: Map<string, THREE.PositionalAudio> = new Map();
@@ -92,6 +99,10 @@ export class HelicopterModel implements GameSystem {
     // Initialize rotor speeds
     this.mainRotorSpeed.set('us_huey', 0);
     this.tailRotorSpeed.set('us_huey', 0);
+
+    // Initialize visual tilt quaternions
+    this.visualTiltQuaternion.set('us_huey', new THREE.Quaternion());
+    this.targetTiltQuaternion.set('us_huey', new THREE.Quaternion());
 
     // Initialize helicopter audio
     console.log('🚁🔊 Initializing helicopter audio for us_huey');
@@ -782,10 +793,50 @@ export class HelicopterModel implements GameSystem {
     // Apply physics state to 3D model
     const state = physics.getState();
     helicopter.position.copy(state.position);
-    helicopter.quaternion.copy(state.quaternion);
+
+    // Get current control inputs for visual tilt calculation
+    const currentControls = physics.getControls();
+
+    // Calculate target visual tilt based on current controls
+    const targetTilt = this.calculateVisualTilt(currentControls);
+    this.targetTiltQuaternion.set(helicopterId, targetTilt);
+
+    // Smooth interpolation of visual tilt
+    const currentVisualTilt = this.visualTiltQuaternion.get(helicopterId)!;
+    const targetVisualTilt = this.targetTiltQuaternion.get(helicopterId)!;
+
+    // Use different interpolation rates based on whether we're tilting or leveling
+    const hasInput = Math.abs(currentControls.cyclicPitch) > 0.01 || Math.abs(currentControls.cyclicRoll) > 0.01;
+    const lerpRate = hasInput ? this.TILT_SMOOTH_RATE : this.AUTO_LEVEL_RATE;
+
+    currentVisualTilt.slerp(targetVisualTilt, Math.min(deltaTime * lerpRate, 1.0));
+
+    // Combine physics rotation with visual tilt
+    const finalQuaternion = state.quaternion.clone();
+    finalQuaternion.multiply(currentVisualTilt);
+    helicopter.quaternion.copy(finalQuaternion);
 
     // Update player position without affecting camera (camera has its own logic)
     this.playerController.updatePlayerPosition(state.position);
+  }
+
+  // Calculate visual tilt quaternion based on control inputs
+  private calculateVisualTilt(controls: HelicopterControls): THREE.Quaternion {
+    // Convert cyclic control inputs to visual tilt angles
+    // cyclicPitch: forward/backward movement -> pitch tilt (rotation around X-axis)
+    // cyclicRoll: left/right movement -> roll tilt (rotation around Z-axis)
+
+    // Fixed: 90-degree rotation in axis mapping
+    // Arrow Up (cyclicPitch +1) → should tilt forward
+    // Arrow Right (cyclicRoll +1) → should tilt right
+
+    // Apply 90-degree rotation: pitch becomes roll, roll becomes pitch
+    const pitchAngle = -controls.cyclicRoll * this.MAX_TILT_ANGLE;   // Right input → forward tilt
+    const rollAngle = controls.cyclicPitch * this.MAX_TILT_ANGLE;    // Forward input → right tilt
+
+    // Create quaternion from euler angles
+    const euler = new THREE.Euler(pitchAngle, 0, rollAngle, 'YXZ');
+    return new THREE.Quaternion().setFromEuler(euler);
   }
 
   // Get control inputs from keyboard/mouse
@@ -994,6 +1045,8 @@ export class HelicopterModel implements GameSystem {
     this.helicopterPhysics.clear();
     this.mainRotorSpeed.clear();
     this.tailRotorSpeed.clear();
+    this.visualTiltQuaternion.clear();
+    this.targetTiltQuaternion.clear();
 
     // Unregister collision objects
     if (this.terrainManager && 'unregisterCollisionObject' in this.terrainManager) {
