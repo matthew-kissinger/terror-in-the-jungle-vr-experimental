@@ -209,7 +209,8 @@ export class ModernPlayerController implements GameSystem {
       const speed = input.sprint ? this.state.runSpeed : this.state.walkSpeed;
       const targetVelocity = new THREE.Vector3();
       targetVelocity.addScaledVector(right, input.movement.x * speed);
-      targetVelocity.addScaledVector(forward, input.movement.y * speed); // Fixed: removed negation
+      // Negate Y for keyboard controls (forward is negative Y on keyboard)
+      targetVelocity.addScaledVector(forward, -input.movement.y * speed);
 
       // Apply acceleration
       const acceleration = this.state.isGrounded ? this.ACCELERATION : this.ACCELERATION * 0.2;
@@ -433,6 +434,18 @@ export class ModernPlayerController implements GameSystem {
 
   public setGameModeManager(gameModeManager: any): void {
     this.gameModeManager = gameModeManager;
+  }
+
+  public setPosition(position: THREE.Vector3): void {
+    // Set player position directly (used after game mode selection)
+    this.state.position.copy(position);
+    this.cameraRig.setPosition(position);
+
+    // Reset velocity to prevent falling
+    this.state.velocity.set(0, 0, 0);
+    this.state.isGrounded = false;
+
+    console.log(`🎯 Player positioned at: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
   }
 
   /**

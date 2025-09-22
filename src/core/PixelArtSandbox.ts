@@ -99,11 +99,7 @@ export class PixelArtSandbox {
         console.log('☁️ Skybox created');
       }
 
-      // Pre-generate spawn area chunks
-      console.log('🌍 Pre-generating spawn area...');
-      const spawnPosition = new THREE.Vector3(0, 5, -50);
-      await this.systemManager.preGenerateSpawnArea(spawnPosition);
-
+      // Skip pre-generation here - will do it after game mode is selected
       console.log('🌍 World system ready!');
       this.loadingScreen.updateProgress('entities', 1);
 
@@ -136,7 +132,35 @@ export class PixelArtSandbox {
     console.log(`🎮 PixelArtSandbox: Calling systemManager.setGameMode(${mode})`);
     this.systemManager.setGameMode(mode);
 
-    this.startGame();
+    // Pre-generate terrain for the selected game mode
+    this.preGenerateForGameMode().then(() => {
+      this.startGame();
+    });
+  }
+
+  private async preGenerateForGameMode(): Promise<void> {
+    // Show loading indicator
+    this.sandboxRenderer.showSpawnLoadingIndicator();
+
+    try {
+      // Get spawn position for current game mode
+      const gm = (this.systemManager as any).gameModeManager;
+      const cfg = gm.getCurrentConfig();
+      const Faction = { US: 'US', OPFOR: 'OPFOR' } as any;
+      const spawn = cfg.zones.find((z: any) => z.isHomeBase && z.owner === Faction.US && (z.id.includes('main') || z.id === 'us_base'));
+
+      if (spawn) {
+        const spawnPos = spawn.position.clone();
+        console.log(`🌍 Pre-generating terrain for ${cfg.name} at position ${spawnPos.x}, ${spawnPos.z}...`);
+        await this.systemManager.preGenerateSpawnArea(spawnPos);
+      } else {
+        // Fallback
+        const defaultPos = new THREE.Vector3(0, 5, -50);
+        await this.systemManager.preGenerateSpawnArea(defaultPos);
+      }
+    } catch (error) {
+      console.error('Failed to pre-generate terrain:', error);
+    }
   }
 
   private startGame(): void {
@@ -163,8 +187,28 @@ export class PixelArtSandbox {
         const spawn = cfg.zones.find((z: any) => z.isHomeBase && z.owner === Faction.US && (z.id.includes('main') || z.id === 'us_base'));
         if (spawn) {
           const pos = spawn.position.clone();
-          pos.y = 5;
+
+          // Get terrain height at spawn position
+          const chunkManager = (this.systemManager as any).chunkManager;
+          if (chunkManager) {
+            const terrainHeight = chunkManager.getEffectiveHeightAt(pos.x, pos.z);
+            if (terrainHeight > -100) {
+              pos.y = terrainHeight + 2;
+            } else {
+              pos.y = 5;
+            }
+          } else {
+            pos.y = 5;
+          }
+
+          // Set position on both player controllers
           this.systemManager.playerController.setPosition(pos);
+
+          // Also set on modern player controller if it exists
+          const modernController = (this.systemManager as any).modernPlayerController;
+          if (modernController && typeof modernController.setPosition === 'function') {
+            modernController.setPosition(pos);
+          }
         }
       } catch { /* ignore */ }
 
