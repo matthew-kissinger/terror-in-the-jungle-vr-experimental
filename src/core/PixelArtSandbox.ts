@@ -132,16 +132,21 @@ export class PixelArtSandbox {
     console.log(`🎮 PixelArtSandbox: Calling systemManager.setGameMode(${mode})`);
     this.systemManager.setGameMode(mode);
 
+    // Hide menu and show loading immediately
+    this.loadingScreen.hide();
+    this.sandboxRenderer.showSpawnLoadingIndicator();
+    this.sandboxRenderer.showRenderer();
+
     // Pre-generate terrain for the selected game mode
     this.preGenerateForGameMode().then(() => {
       this.startGame();
+    }).catch((error) => {
+      console.error('Failed to start game:', error);
+      this.sandboxRenderer.hideSpawnLoadingIndicator();
     });
   }
 
   private async preGenerateForGameMode(): Promise<void> {
-    // Show loading indicator
-    this.sandboxRenderer.showSpawnLoadingIndicator();
-
     try {
       // Get spawn position for current game mode
       const gm = (this.systemManager as any).gameModeManager;
@@ -165,11 +170,6 @@ export class PixelArtSandbox {
 
   private startGame(): void {
     if (!this.gameStarted) return;
-
-    // Hide menu and show loading
-    this.loadingScreen.hide();
-    this.sandboxRenderer.showSpawnLoadingIndicator();
-    this.sandboxRenderer.showRenderer();
 
     const startTime = performance.now();
 
