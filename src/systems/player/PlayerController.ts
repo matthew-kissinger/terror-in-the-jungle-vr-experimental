@@ -322,7 +322,9 @@ export class PlayerController implements GameSystem {
     // Check ground collision using ImprovedChunkManager if available, otherwise use flat baseline
     let groundHeight = 2; // Default player height above ground (flat world fallback)
     if (this.chunkManager) {
-      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(newPosition.x, newPosition.z);
+      // Use the position of the VR rig for ground checks if in VR
+      const checkPos = this.vrManager?.isVRActive() ? this.vrManager.getVRPlayerPosition() : newPosition;
+      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(checkPos.x, checkPos.z);
       groundHeight = effectiveHeight + 2;
     }
     
@@ -404,27 +406,33 @@ export class PlayerController implements GameSystem {
       }
     }
 
-    // Apply gravity in VR (same as desktop)
+    // Apply gravity to the player's state velocity, not directly to the rig
     this.playerState.velocity.y += this.playerState.gravity * deltaTime;
 
+    const vrPlayerPos = this.vrManager.getVRPlayerPosition();
+
+    // Apply vertical velocity to the rig
+    vrPlayerPos.y += this.playerState.velocity.y * deltaTime;
+
     // Ground collision for VR
-    let groundHeight = 2;
+    let groundHeight = 0; // The actual terrain surface
     if (this.chunkManager) {
-      const vrPos = this.vrManager.getVRPlayerPosition();
-      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(vrPos.x, vrPos.z);
-      groundHeight = effectiveHeight + 2;
+      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(vrPlayerPos.x, vrPlayerPos.z);
+      groundHeight = effectiveHeight;
     }
 
-    const currentPos = this.vrManager.getVRPlayerPosition();
-    if (currentPos.y <= groundHeight) {
-      currentPos.y = groundHeight;
+    if (vrPlayerPos.y <= groundHeight) {
+      vrPlayerPos.y = groundHeight;
       this.playerState.velocity.y = 0;
       this.playerState.isGrounded = true;
       this.playerState.isJumping = false;
-      this.vrManager.setVRPlayerPosition(currentPos);
     } else {
       this.playerState.isGrounded = false;
     }
+
+    // Update both the VR rig and the internal player state position
+    this.vrManager.setVRPlayerPosition(vrPlayerPos);
+    this.playerState.position.copy(vrPlayerPos);
   }
 
   private updateHelicopterControls(deltaTime: number): void {

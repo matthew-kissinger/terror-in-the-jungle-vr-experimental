@@ -112,34 +112,33 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
-    // Get camera's WORLD position, not local position
-    const currentPlayerPosition = new THREE.Vector3();
-    this.camera.getWorldPosition(currentPlayerPosition);
-    console.log(`🥽 Entering VR from world position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
+    // Get the definitive player ground position from the PlayerController
+    let playerFeetPosition = new THREE.Vector3();
+    if (this.playerController && typeof this.playerController.getPosition === 'function') {
+      playerFeetPosition = this.playerController.getPosition();
+      console.log(`🥽 PlayerController ground position: ${playerFeetPosition.x.toFixed(1)}, ${playerFeetPosition.y.toFixed(1)}, ${playerFeetPosition.z.toFixed(1)}`);
+    } else {
+      console.error("VRManager: Could not get player position from controller!");
+      // Fallback to a safe default if needed
+      playerFeetPosition.set(0, 5, 0);
+    }
 
-    // Now that VR is active, move camera to VR group and apply VR settings
-    this.camera.parent?.remove(this.camera);
-    this.vrPlayerGroup.add(this.camera);
+    // Position the VR Player Group (the "feet") at this exact location
+    // The player's y-position from the controller should already be on the terrain
+    this.vrPlayerGroup.position.copy(playerFeetPosition);
+    this.vrPlayerGroup.rotation.set(0, 0, 0); // Reset rig rotation initially
 
     // Use 1:1 scale (no scaling needed with WebXR standard)
     this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
 
-    // Set VR standing height (1.6m - standard human height)
-    this.camera.position.set(0, 1.6, 0);
-
-    // Position VR player group at current game position to maintain terrain alignment
-    this.vrPlayerGroup.position.copy(currentPlayerPosition);
-    this.vrPlayerGroup.position.y -= 1.6; // Offset for camera height within group
-    this.vrPlayerGroup.rotation.set(0, 0, 0);
+    // Move the camera into the VR group and set its local position for standing height
+    // The camera's parent is now the scene, so this is safe
+    this.camera.parent?.remove(this.camera);
+    this.vrPlayerGroup.add(this.camera);
+    this.camera.position.set(0, 1.6, 0); // Standard standing height (approx. 1.6m)
+    this.camera.rotation.set(0, 0, 0);   // Reset camera rotation within the rig
 
     console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
-
-    // Sync VR position back to PlayerController
-    if (this.playerController && typeof this.playerController.setPosition === 'function') {
-      // Set the player controller to the VR group position (which represents player feet position)
-      this.playerController.setPosition(this.vrPlayerGroup.position.clone());
-      console.log('🥽 Synced VR position to PlayerController');
-    }
 
     // Attach VR weapon to controller
     if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {
