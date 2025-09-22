@@ -343,7 +343,10 @@ export class PlayerController implements GameSystem {
   }
 
   private updateVRMovement(deltaTime: number): void {
-    if (!this.vrManager) return;
+    if (!this.vrManager) {
+      console.warn('⚠️ updateVRMovement called but vrManager is null');
+      return;
+    }
 
     // Get VR controller inputs
     const inputs = this.vrManager.getControllerInputs();
@@ -698,6 +701,12 @@ Escape - Release pointer lock / Exit helicopter
 
   getPosition(): THREE.Vector3 {
     return this.playerState.position.clone();
+  }
+
+  syncPositionFromVR(position: THREE.Vector3): void {
+    // Sync the player state position when VR takes control
+    this.playerState.position.copy(position);
+    console.log(`🎮 Player position synced from VR: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
   }
 
   getVelocity(): THREE.Vector3 {

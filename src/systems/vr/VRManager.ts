@@ -53,6 +53,10 @@ export class VRManager implements GameSystem {
     yButton: false
   };
 
+  // Debug flag for input source warning
+  private noInputSourceWarned = false;
+  private debugTimer = 0;
+
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
     this.camera = camera;
@@ -112,19 +116,18 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
-    // Get the definitive player ground position from the PlayerController
-    let playerFeetPosition = new THREE.Vector3();
-    if (this.playerController && typeof this.playerController.getPosition === 'function') {
-      playerFeetPosition = this.playerController.getPosition();
-      console.log(`🥽 PlayerController ground position: ${playerFeetPosition.x.toFixed(1)}, ${playerFeetPosition.y.toFixed(1)}, ${playerFeetPosition.z.toFixed(1)}`);
-    } else {
-      console.error("VRManager: Could not get player position from controller!");
-      // Fallback to a safe default if needed
-      playerFeetPosition.set(0, 5, 0);
-    }
+    // Get the camera's ACTUAL world position - this is where the player really is
+    const cameraWorldPos = new THREE.Vector3();
+    this.camera.getWorldPosition(cameraWorldPos);
+    console.log(`🥽 Camera world position: ${cameraWorldPos.x.toFixed(1)}, ${cameraWorldPos.y.toFixed(1)}, ${cameraWorldPos.z.toFixed(1)}`);
 
-    // Position the VR Player Group (the "feet") at this exact location
-    // The player's y-position from the controller should already be on the terrain
+    // Calculate the floor position (camera height - standing height)
+    const playerFeetPosition = cameraWorldPos.clone();
+    playerFeetPosition.y -= 1.8; // Subtract typical eye height to get floor position
+
+    console.log(`🥽 Calculated floor position: ${playerFeetPosition.x.toFixed(1)}, ${playerFeetPosition.y.toFixed(1)}, ${playerFeetPosition.z.toFixed(1)}`);
+
+    // Position the VR Player Group at the floor position
     this.vrPlayerGroup.position.copy(playerFeetPosition);
     this.vrPlayerGroup.rotation.set(0, 0, 0); // Reset rig rotation initially
 
@@ -132,13 +135,18 @@ export class VRManager implements GameSystem {
     this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
 
     // Move the camera into the VR group and set its local position for standing height
-    // The camera's parent is now the scene, so this is safe
     this.camera.parent?.remove(this.camera);
     this.vrPlayerGroup.add(this.camera);
     this.camera.position.set(0, 1.6, 0); // Standard standing height (approx. 1.6m)
     this.camera.rotation.set(0, 0, 0);   // Reset camera rotation within the rig
 
     console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+    console.log(`🥽 Camera local position in group: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`);
+
+    // Sync this position back to the PlayerController
+    if (this.playerController && typeof this.playerController.syncPositionFromVR === 'function') {
+      this.playerController.syncPositionFromVR(this.vrPlayerGroup.position.clone());
+    }
 
     // Attach VR weapon to controller
     if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {
@@ -211,35 +219,70 @@ export class VRManager implements GameSystem {
 
     // Update controller input from gamepad data
     this.updateControllerInputs();
+
+    // Debug: Periodically log positions to understand what's happening
+    if (!this.debugTimer) this.debugTimer = 0;
+    this.debugTimer += deltaTime;
+    if (this.debugTimer > 3) { // Log every 3 seconds
+      this.debugTimer = 0;
+      const cameraWorld = new THREE.Vector3();
+      this.camera.getWorldPosition(cameraWorld);
+      console.log(`🥽 VR Debug:
+        vrPlayerGroup: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}
+        camera local: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}
+        camera world: ${cameraWorld.x.toFixed(1)}, ${cameraWorld.y.toFixed(1)}, ${cameraWorld.z.toFixed(1)}`);
+    }
   }
 
   private updateControllerInputs(): void {
     if (!this.vrSession) return;
 
+    let hasInputSources = false;
     // Poll gamepad data for thumbsticks
     for (const source of this.vrSession.inputSources) {
+      hasInputSources = true;
       if (source.gamepad) {
         const gamepad = source.gamepad;
         const handedness = source.handedness;
 
         if (handedness === 'left') {
           // Left thumbstick for movement
-          this.controllerInputs.leftThumbstick.x = this.applyDeadzone(gamepad.axes[2] || 0);
-          this.controllerInputs.leftThumbstick.z = this.applyDeadzone(gamepad.axes[3] || 0);
+          const leftX = gamepad.axes[2] || 0;
+          const leftZ = gamepad.axes[3] || 0;
+          this.controllerInputs.leftThumbstick.x = this.applyDeadzone(leftX);
+          this.controllerInputs.leftThumbstick.z = this.applyDeadzone(leftZ);
+
+          // Debug log significant movement
+          if (Math.abs(leftX) > 0.1 || Math.abs(leftZ) > 0.1) {
+            console.log(`🎮 Left stick: X=${leftX.toFixed(2)}, Z=${leftZ.toFixed(2)}`);
+          }
 
           // Left controller buttons (X and Y)
           this.controllerInputs.xButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
           this.controllerInputs.yButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
         } else if (handedness === 'right') {
           // Right thumbstick for turning
-          this.controllerInputs.rightThumbstick.x = this.applyDeadzone(gamepad.axes[2] || 0);
-          this.controllerInputs.rightThumbstick.y = this.applyDeadzone(gamepad.axes[3] || 0);
+          const rightX = gamepad.axes[2] || 0;
+          const rightY = gamepad.axes[3] || 0;
+          this.controllerInputs.rightThumbstick.x = this.applyDeadzone(rightX);
+          this.controllerInputs.rightThumbstick.y = this.applyDeadzone(rightY);
+
+          // Debug log significant movement
+          if (Math.abs(rightX) > 0.1 || Math.abs(rightY) > 0.1) {
+            console.log(`🎮 Right stick: X=${rightX.toFixed(2)}, Y=${rightY.toFixed(2)}`);
+          }
 
           // Right controller buttons (A and B)
           this.controllerInputs.aButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
           this.controllerInputs.bButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
         }
       }
+    }
+
+    // Log once if no input sources
+    if (!hasInputSources && !this.noInputSourceWarned) {
+      console.warn('⚠️ VR: No input sources detected');
+      this.noInputSourceWarned = true;
     }
   }
 
