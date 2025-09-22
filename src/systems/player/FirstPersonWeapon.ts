@@ -86,6 +86,9 @@ export class FirstPersonWeapon implements GameSystem {
   // VR weapon state
   private vr3DWeapon?: THREE.Group; // 3D weapon model for VR
   private vrWeaponAttached = false;
+  private vrMuzzleRef?: THREE.Object3D; // Muzzle reference for VR weapon
+  private vrAimingLaser?: THREE.Line; // Laser sight for VR aiming
+  private vrCrosshair?: THREE.Mesh; // 3D crosshair for VR aiming
   
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -135,6 +138,11 @@ export class FirstPersonWeapon implements GameSystem {
     }
 
     console.log('✅ First Person Weapon initialized (programmatic rifle)');
+
+    // Create VR weapon if VR Manager is available
+    if (this.vrManager) {
+      this.createVRWeapon();
+    }
 
     // Trigger initial ammo display
     this.onAmmoChange(this.ammoManager.getState());
@@ -203,6 +211,16 @@ export class FirstPersonWeapon implements GameSystem {
       const inputs = this.vrManager.getControllerInputs();
       if (inputs.rightTrigger > 0 && !this.isReloadAnimating) {
         this.tryFireVR();
+      }
+
+      // Update VR aiming system
+      if (this.vrWeaponAttached) {
+        this.updateVRAiming();
+      }
+
+      // Handle VR B button for reload
+      if (this.vrManager.isButtonPressed('bButton') && !this.isReloadAnimating) {
+        this.startReload();
       }
     } else {
       // Auto-fire while mouse is held (desktop mode)
@@ -551,6 +569,128 @@ export class FirstPersonWeapon implements GameSystem {
 
   setVRManager(vrManager: VRManager): void {
     this.vrManager = vrManager;
+  }
+
+  private createVRWeapon(): void {
+    if (!this.vrManager) return;
+
+    // Create 3D weapon for VR using the same factory as desktop
+    this.vr3DWeapon = ProgrammaticGunFactory.createRifle();
+
+    // Scale weapon for VR hand size (slightly smaller than desktop overlay)
+    this.vr3DWeapon.scale.set(0.6, 0.6, 0.6);
+
+    // Position weapon in hand (adjust for natural grip)
+    this.vr3DWeapon.position.set(0, -0.1, 0.15); // Slightly forward and down from grip
+    this.vr3DWeapon.rotation.set(0, 0, Math.PI / 12); // Slight upward angle
+
+    // Get muzzle reference for VR aiming
+    this.vrMuzzleRef = this.vr3DWeapon.getObjectByName('muzzle');
+
+    // Create VR aiming system
+    this.createVRAimingSystem();
+
+    console.log('🔫 VR 3D weapon created');
+  }
+
+  private createVRAimingSystem(): void {
+    if (!this.vr3DWeapon || !this.vrMuzzleRef) return;
+
+    // Create laser sight - thin red line
+    const laserGeometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -10) // 10 meters forward
+    ]);
+    const laserMaterial = new THREE.LineBasicMaterial({
+      color: 0xff0000,
+      opacity: 0.6,
+      transparent: true
+    });
+    this.vrAimingLaser = new THREE.Line(laserGeometry, laserMaterial);
+    this.vrAimingLaser.visible = false; // Hidden by default
+
+    // Add laser to the weapon (it will follow the muzzle)
+    this.vr3DWeapon.add(this.vrAimingLaser);
+
+    // Create 3D crosshair - small glowing sphere
+    const crosshairGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+    const crosshairMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff44,
+      transparent: true,
+      opacity: 0.8
+    });
+    this.vrCrosshair = new THREE.Mesh(crosshairGeometry, crosshairMaterial);
+    this.vrCrosshair.visible = false; // Hidden by default
+    this.scene.add(this.vrCrosshair);
+
+    console.log('🎯 VR aiming system created');
+  }
+
+  private updateVRAiming(): void {
+    if (!this.vrManager || !this.vrCrosshair || !this.vrMuzzleRef) return;
+
+    // Get right controller for aiming direction
+    const rightController = this.vrManager.getRightController();
+    if (!rightController) return;
+
+    // Get muzzle position in world coordinates
+    const muzzlePosition = new THREE.Vector3();
+    this.vrMuzzleRef.getWorldPosition(muzzlePosition);
+
+    // Get aiming direction from controller
+    const aimDirection = new THREE.Vector3();
+    rightController.getWorldDirection(aimDirection);
+
+    // Perform raycast to find hit point
+    const raycaster = new THREE.Raycaster(muzzlePosition, aimDirection);
+
+    // Default crosshair distance (10 meters if no hit)
+    let hitDistance = 10;
+    let hitPoint = muzzlePosition.clone().add(aimDirection.clone().multiplyScalar(hitDistance));
+
+    // Raycast against terrain and objects (simple implementation for now)
+    // In a full implementation, this would raycast against terrain geometry
+    // For now, place crosshair at fixed distance
+    hitPoint = muzzlePosition.clone().add(aimDirection.clone().multiplyScalar(hitDistance));
+
+    // Position crosshair at hit point
+    this.vrCrosshair.position.copy(hitPoint);
+
+    // Make crosshair face the camera for better visibility
+    const cameraPosition = this.vrManager.getHeadPosition();
+    this.vrCrosshair.lookAt(cameraPosition);
+  }
+
+  public attachVRWeapon(): void {
+    if (!this.vrManager || !this.vr3DWeapon || this.vrWeaponAttached) return;
+
+    const rightGrip = this.vrManager.getRightController();
+    if (rightGrip) {
+      rightGrip.add(this.vr3DWeapon);
+      this.vrWeaponAttached = true;
+
+      // Show VR aiming system
+      if (this.vrAimingLaser) this.vrAimingLaser.visible = true;
+      if (this.vrCrosshair) this.vrCrosshair.visible = true;
+
+      console.log('🔫 VR weapon attached to right controller');
+    }
+  }
+
+  public detachVRWeapon(): void {
+    if (!this.vrManager || !this.vr3DWeapon || !this.vrWeaponAttached) return;
+
+    const rightGrip = this.vrManager.getRightController();
+    if (rightGrip) {
+      rightGrip.remove(this.vr3DWeapon);
+      this.vrWeaponAttached = false;
+
+      // Hide VR aiming system
+      if (this.vrAimingLaser) this.vrAimingLaser.visible = false;
+      if (this.vrCrosshair) this.vrCrosshair.visible = false;
+
+      console.log('🔫 VR weapon detached from controller');
+    }
   }
 
   // Disable weapon (for death)

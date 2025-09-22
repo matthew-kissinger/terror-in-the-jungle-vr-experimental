@@ -19,8 +19,8 @@ export class VRManager implements GameSystem {
   // Controller models
   private controllerModelFactory: XRControllerModelFactory;
 
-  // VR scale factor (game units to VR meters)
-  public readonly VR_SCALE = 0.1; // 10 game units = 1 VR meter
+  // VR scale factor (WebXR standard: 1 unit = 1 meter)
+  public readonly VR_SCALE = 1.0; // 1:1 scale following WebXR best practices
 
   // Controller input state
   private controllerInputs = {
@@ -29,11 +29,26 @@ export class VRManager implements GameSystem {
     leftTrigger: 0,
     rightTrigger: 0,
     leftGrip: false,
-    rightGrip: false
+    rightGrip: false,
+    aButton: false,
+    bButton: false,
+    xButton: false,
+    yButton: false
   };
 
   // VR session state
   private vrSession: XRSession | null = null;
+
+  // Reference to weapon system for VR weapon attachment
+  private firstPersonWeapon?: any;
+
+  // Button press cooldowns to prevent multiple triggers
+  private buttonCooldowns = {
+    aButton: false,
+    bButton: false,
+    xButton: false,
+    yButton: false
+  };
 
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
@@ -94,33 +109,52 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
+    // Store current camera position before moving to VR group
+    const currentPosition = this.camera.position.clone();
+
     // Now that VR is active, move camera to VR group and apply VR settings
     this.camera.parent?.remove(this.camera);
     this.vrPlayerGroup.add(this.camera);
 
-    // Scale the VR player group for proper VR scale
+    // Use 1:1 scale (no scaling needed with WebXR standard)
     this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
 
-    // Set VR standing height (1.6m in VR space, scaled to game units)
-    this.camera.position.set(0, 1.6 / this.VR_SCALE, 0);
+    // Set VR standing height (1.6m - standard human height)
+    this.camera.position.set(0, 1.6, 0);
 
-    // Reset VR player group position
-    this.vrPlayerGroup.position.set(0, 0, 0);
+    // Position VR player group at current game position to maintain terrain alignment
+    this.vrPlayerGroup.position.copy(currentPosition);
+    this.vrPlayerGroup.position.y -= 1.6; // Offset for camera height within group
     this.vrPlayerGroup.rotation.set(0, 0, 0);
+
+    console.log(`🥽 VR player positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+
+    // Attach VR weapon to controller
+    if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {
+      // Small delay to ensure controllers are ready
+      setTimeout(() => {
+        this.firstPersonWeapon.attachVRWeapon();
+      }, 100);
+    }
   }
 
   private onVRSessionEnd(): void {
     this.vrSession = null;
     console.log('🥽 VR session ended');
 
+    // Detach VR weapon from controller
+    if (this.firstPersonWeapon && typeof this.firstPersonWeapon.detachVRWeapon === 'function') {
+      this.firstPersonWeapon.detachVRWeapon();
+    }
+
     // Return camera to scene and restore normal positioning
     this.vrPlayerGroup.remove(this.camera);
     this.scene.add(this.camera);
 
-    // Reset VR group scale
+    // Reset VR group scale to 1:1
     this.vrPlayerGroup.scale.setScalar(1);
 
-    // Reset camera position to normal desktop position
+    // Reset camera position to normal desktop position (1.8m height)
     this.camera.position.set(0, 1.8, 0);
   }
 
@@ -181,10 +215,18 @@ export class VRManager implements GameSystem {
           // Left thumbstick for movement
           this.controllerInputs.leftThumbstick.x = this.applyDeadzone(gamepad.axes[2] || 0);
           this.controllerInputs.leftThumbstick.z = this.applyDeadzone(gamepad.axes[3] || 0);
+
+          // Left controller buttons (X and Y)
+          this.controllerInputs.xButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+          this.controllerInputs.yButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
         } else if (handedness === 'right') {
-          // Right thumbstick for turning (optional)
+          // Right thumbstick for turning
           this.controllerInputs.rightThumbstick.x = this.applyDeadzone(gamepad.axes[2] || 0);
           this.controllerInputs.rightThumbstick.y = this.applyDeadzone(gamepad.axes[3] || 0);
+
+          // Right controller buttons (A and B)
+          this.controllerInputs.aButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+          this.controllerInputs.bButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
         }
       }
     }
@@ -211,6 +253,20 @@ export class VRManager implements GameSystem {
 
   getControllerInputs() {
     return { ...this.controllerInputs };
+  }
+
+  // Check if a button was just pressed (not held)
+  isButtonPressed(button: 'aButton' | 'bButton' | 'xButton' | 'yButton'): boolean {
+    const pressed = this.controllerInputs[button];
+    if (pressed && !this.buttonCooldowns[button]) {
+      this.buttonCooldowns[button] = true;
+      // Reset cooldown after short delay
+      setTimeout(() => {
+        this.buttonCooldowns[button] = false;
+      }, 200);
+      return true;
+    }
+    return false;
   }
 
   getLeftController(): THREE.Group {
@@ -241,20 +297,14 @@ export class VRManager implements GameSystem {
     this.vrPlayerGroup.position.add(movement);
   }
 
-  // Get VR player position in game coordinates
+  // Get VR player position (now 1:1 coordinates)
   getVRPlayerPosition(): THREE.Vector3 {
-    const position = this.vrPlayerGroup.position.clone();
-    // Convert from VR space back to game coordinates
-    position.divideScalar(this.VR_SCALE);
-    return position;
+    return this.vrPlayerGroup.position.clone();
   }
 
-  // Set VR player position from game coordinates
+  // Set VR player position (now 1:1 coordinates)
   setVRPlayerPosition(position: THREE.Vector3): void {
-    const vrPosition = position.clone();
-    // Convert from game coordinates to VR space
-    vrPosition.multiplyScalar(this.VR_SCALE);
-    this.vrPlayerGroup.position.copy(vrPosition);
+    this.vrPlayerGroup.position.copy(position);
   }
 
   // Get head position in world coordinates for gameplay logic
@@ -273,5 +323,10 @@ export class VRManager implements GameSystem {
     const headRot = new THREE.Quaternion();
     this.camera.getWorldQuaternion(headRot);
     return headRot;
+  }
+
+  // Set reference to weapon system for VR weapon attachment
+  setFirstPersonWeapon(firstPersonWeapon: any): void {
+    this.firstPersonWeapon = firstPersonWeapon;
   }
 }

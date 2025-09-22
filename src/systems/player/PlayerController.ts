@@ -16,6 +16,7 @@ export class PlayerController implements GameSystem {
   private hudSystem?: any;
   private sandboxRenderer?: any;
   private vrManager?: VRManager;
+  private vrSnapTurnCooldown = false;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -362,7 +363,7 @@ export class PlayerController implements GameSystem {
 
       // Calculate movement vector in world space
       const moveSpeed = this.playerState.isRunning ? this.playerState.runSpeed : this.playerState.speed;
-      const vrMoveSpeed = moveSpeed * 0.1; // Scale for VR (10 game units = 1 VR meter)
+      const vrMoveSpeed = moveSpeed; // Use normal move speed (1:1 scale)
 
       const movement = new THREE.Vector3();
       movement.addScaledVector(headDirection, -moveZ * vrMoveSpeed * deltaTime);
@@ -375,12 +376,32 @@ export class PlayerController implements GameSystem {
       this.playerState.position.copy(this.vrManager.getVRPlayerPosition());
     }
 
-    // Handle VR-specific actions (grip buttons, etc.)
-    if (inputs.rightGrip && !this.playerState.isJumping && this.playerState.isGrounded) {
-      // Use right grip for jump in VR
+    // Handle VR-specific actions (A button for jump, right grip as alternative)
+    const jumpPressed = (inputs.rightGrip || this.vrManager.isButtonPressed('aButton')) &&
+                       !this.playerState.isJumping && this.playerState.isGrounded;
+
+    if (jumpPressed) {
+      // Jump in VR (A button or right grip)
       this.playerState.velocity.y = this.playerState.jumpForce;
       this.playerState.isJumping = true;
       this.playerState.isGrounded = false;
+    }
+
+    // Handle right thumbstick for rotation (snap turn)
+    if (Math.abs(inputs.rightThumbstick.x) > 0.7) {
+      // Snap turn - rotate by 30 degrees when thumbstick moves significantly
+      const turnAmount = inputs.rightThumbstick.x > 0 ? Math.PI / 6 : -Math.PI / 6; // 30 degrees
+
+      // Only snap turn once per stick movement (prevent multiple snaps)
+      if (!this.vrSnapTurnCooldown) {
+        this.yaw += turnAmount;
+        this.vrSnapTurnCooldown = true;
+
+        // Cooldown to prevent rapid snapping
+        setTimeout(() => {
+          this.vrSnapTurnCooldown = false;
+        }, 300);
+      }
     }
 
     // Apply gravity in VR (same as desktop)

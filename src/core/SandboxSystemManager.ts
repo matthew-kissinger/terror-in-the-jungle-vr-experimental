@@ -165,6 +165,7 @@ export class SandboxSystemManager {
     this.firstPersonWeapon.setZoneManager(this.zoneManager);
     if (this.vrManager) {
       this.firstPersonWeapon.setVRManager(this.vrManager);
+      this.vrManager.setFirstPersonWeapon(this.firstPersonWeapon);
     }
     this.hudSystem.setCombatantSystem(this.combatantSystem);
     this.hudSystem.setZoneManager(this.zoneManager);
