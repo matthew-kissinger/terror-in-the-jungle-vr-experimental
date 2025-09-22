@@ -22,6 +22,10 @@ import { CompassSystem } from '../ui/compass/CompassSystem';
 import { HelipadSystem } from '../systems/helicopter/HelipadSystem';
 import { HelicopterModel } from '../systems/helicopter/HelicopterModel';
 import { VRManager } from '../systems/vr/VRManager';
+import { CameraRig } from '../systems/camera/CameraRig';
+import { InputManager } from '../systems/input/InputManager';
+import { VRSystem } from '../systems/vr/VRSystem';
+import { ModernPlayerController } from '../systems/player/ModernPlayerController';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -49,6 +53,12 @@ export class SandboxSystemManager {
   public helicopterModel!: HelicopterModel;
   public vrManager!: VRManager;
 
+  // New modern systems
+  public cameraRig!: CameraRig;
+  public inputManager!: InputManager;
+  public vrSystem!: VRSystem;
+  public modernPlayerController!: ModernPlayerController;
+
   async initializeSystems(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
@@ -62,8 +72,18 @@ export class SandboxSystemManager {
 
     this.assetLoader = new AssetLoader();
 
-    // Initialize VR Manager early (needs to be available for other systems)
+    // Initialize modern VR/Desktop systems
     if (sandboxRenderer && sandboxRenderer.renderer) {
+      // Create camera rig first
+      this.cameraRig = new CameraRig(scene, camera);
+
+      // Create input manager
+      this.inputManager = new InputManager(sandboxRenderer.renderer);
+
+      // Create VR system
+      this.vrSystem = new VRSystem(scene, sandboxRenderer.renderer, this.cameraRig, this.inputManager);
+
+      // Keep old VR Manager for backward compatibility during transition
       this.vrManager = new VRManager(scene, camera, sandboxRenderer.renderer);
     }
 
@@ -87,7 +107,18 @@ export class SandboxSystemManager {
     // Phase 4: Initialize world systems
     onProgress('world', 0);
 
+    // Create both controllers for transition period
     this.playerController = new PlayerController(camera);
+
+    // Create modern player controller if we have the new systems
+    if (this.cameraRig && this.inputManager) {
+      this.modernPlayerController = new ModernPlayerController(
+        scene,
+        this.cameraRig,
+        this.inputManager,
+        this.vrSystem
+      );
+    }
     this.combatantSystem = new CombatantSystem(scene, camera, this.globalBillboardSystem, this.assetLoader, this.chunkManager);
     this.skybox = new Skybox(scene);
     this.waterSystem = new WaterSystem(scene, this.assetLoader);
@@ -130,7 +161,18 @@ export class SandboxSystemManager {
       this.gameModeManager
     ];
 
-    // Add VR Manager if it exists
+    // Add new modern systems if they exist
+    if (this.inputManager) {
+      // InputManager doesn't implement GameSystem, so we'll update it separately
+    }
+    if (this.vrSystem) {
+      this.systems.push(this.vrSystem);
+    }
+    if (this.modernPlayerController) {
+      this.systems.push(this.modernPlayerController);
+    }
+
+    // Add VR Manager if it exists (for backward compatibility)
     if (this.vrManager) {
       this.systems.push(this.vrManager);
     }
@@ -146,6 +188,12 @@ export class SandboxSystemManager {
   }
 
   private connectSystems(scene: THREE.Scene, camera: THREE.PerspectiveCamera, sandboxRenderer?: any): void {
+    // Connect modern systems
+    if (this.modernPlayerController) {
+      this.modernPlayerController.setChunkManager(this.chunkManager);
+      this.cameraRig.setChunkManager(this.chunkManager);
+    }
+
     // Connect systems with chunk manager
     this.playerController.setChunkManager(this.chunkManager);
     this.playerController.setGameModeManager(this.gameModeManager);
@@ -264,6 +312,12 @@ export class SandboxSystemManager {
   }
 
   updateSystems(deltaTime: number): void {
+    // Update InputManager separately (doesn't implement GameSystem)
+    if (this.inputManager) {
+      this.inputManager.update(deltaTime);
+    }
+
+    // Update all GameSystem implementations
     for (const system of this.systems) {
       system.update(deltaTime);
     }

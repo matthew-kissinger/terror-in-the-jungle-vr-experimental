@@ -116,32 +116,32 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
+    // CRITICAL: In WebXR, we CANNOT move the camera - WebXR controls it directly
+    // Instead, we use vrPlayerGroup as a "dolly" to offset the player position in the world
+
     // Get the camera's ACTUAL world position - this is where the player really is
     const cameraWorldPos = new THREE.Vector3();
     this.camera.getWorldPosition(cameraWorldPos);
-    console.log(`🥽 Camera world position: ${cameraWorldPos.x.toFixed(1)}, ${cameraWorldPos.y.toFixed(1)}, ${cameraWorldPos.z.toFixed(1)}`);
+    console.log(`🥽 Camera world position before VR: ${cameraWorldPos.x.toFixed(1)}, ${cameraWorldPos.y.toFixed(1)}, ${cameraWorldPos.z.toFixed(1)}`);
 
-    // Calculate the floor position (camera height - standing height)
-    const playerFeetPosition = cameraWorldPos.clone();
-    playerFeetPosition.y -= 1.8; // Subtract typical eye height to get floor position
+    // WebXR will place the camera at the physical floor (y=0 in reference space)
+    // We need to position our dolly/rig to compensate for the terrain height
+    const terrainHeight = cameraWorldPos.y - 1.8; // Current camera y minus eye height = terrain level
 
-    console.log(`🥽 Calculated floor position: ${playerFeetPosition.x.toFixed(1)}, ${playerFeetPosition.y.toFixed(1)}, ${playerFeetPosition.z.toFixed(1)}`);
+    // Position the dolly at the player's XZ position with proper Y offset
+    this.vrPlayerGroup.position.set(
+      cameraWorldPos.x,
+      terrainHeight,  // This is where the player's feet should be on the terrain
+      cameraWorldPos.z
+    );
+    this.vrPlayerGroup.rotation.set(0, 0, 0);
 
-    // Position the VR Player Group at the floor position
-    this.vrPlayerGroup.position.copy(playerFeetPosition);
-    this.vrPlayerGroup.rotation.set(0, 0, 0); // Reset rig rotation initially
+    // IMPORTANT: Do NOT add camera to vrPlayerGroup - WebXR needs it in the scene
+    // The camera stays in the scene, and WebXR will control its position
+    // We'll move the vrPlayerGroup (dolly) for locomotion
 
-    // Use 1:1 scale (no scaling needed with WebXR standard)
-    this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
-
-    // Move the camera into the VR group and set its local position for standing height
-    this.camera.parent?.remove(this.camera);
-    this.vrPlayerGroup.add(this.camera);
-    this.camera.position.set(0, 1.6, 0); // Standard standing height (approx. 1.6m)
-    this.camera.rotation.set(0, 0, 0);   // Reset camera rotation within the rig
-
-    console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
-    console.log(`🥽 Camera local position in group: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`);
+    console.log(`🥽 VR dolly positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+    console.log(`🥽 Expected player height above terrain: ${(cameraWorldPos.y - terrainHeight).toFixed(1)}m`);
 
     // Sync this position back to the PlayerController
     if (this.playerController && typeof this.playerController.syncPositionFromVR === 'function') {
@@ -166,15 +166,14 @@ export class VRManager implements GameSystem {
       this.firstPersonWeapon.detachVRWeapon();
     }
 
-    // Return camera to scene and restore normal positioning
-    this.vrPlayerGroup.remove(this.camera);
-    this.scene.add(this.camera);
+    // Camera should already be in the scene (we didn't move it in VR)
+    // Restore camera position to dolly position for continuity
+    const dollyPos = this.vrPlayerGroup.position.clone();
+    this.camera.position.set(dollyPos.x, dollyPos.y + 1.8, dollyPos.z);
 
-    // Reset VR group scale to 1:1
+    // Reset VR group
+    this.vrPlayerGroup.position.set(0, 0, 0);
     this.vrPlayerGroup.scale.setScalar(1);
-
-    // Reset camera position to normal desktop position (1.8m height)
-    this.camera.position.set(0, 1.8, 0);
   }
 
   // Controller event handlers
@@ -347,7 +346,8 @@ export class VRManager implements GameSystem {
   moveVRPlayer(movement: THREE.Vector3): void {
     if (!this.isVRActive()) return;
 
-    // Apply movement to VR player group
+    // Apply movement to VR player group (dolly)
+    // This moves our reference frame, effectively moving the player in VR
     this.vrPlayerGroup.position.add(movement);
   }
 
@@ -365,8 +365,11 @@ export class VRManager implements GameSystem {
   getHeadPosition(): THREE.Vector3 {
     if (!this.isVRActive()) return this.camera.position.clone();
 
+    // In VR, we need to combine dolly position with camera's local VR position
     const headPos = new THREE.Vector3();
     this.camera.getWorldPosition(headPos);
+    // Add the dolly offset
+    headPos.add(this.vrPlayerGroup.position);
     return headPos;
   }
 

@@ -283,9 +283,12 @@ Have fun!
     this.systemManager.updateSystems(deltaTime);
 
     // Get the appropriate camera for VR or desktop mode
-    const activeCamera = this.sandboxRenderer.isVRPresenting()
-      ? this.sandboxRenderer.getVRCamera()
-      : this.sandboxRenderer.camera;
+    // Use the camera from the CameraRig if available
+    const activeCamera = this.systemManager.cameraRig
+      ? this.systemManager.cameraRig.camera
+      : (this.sandboxRenderer.isVRPresenting()
+        ? this.sandboxRenderer.getVRCamera()
+        : this.sandboxRenderer.camera);
 
     // Update skybox position (use VR camera position if in VR)
     this.systemManager.skybox.updatePosition(activeCamera.position);
