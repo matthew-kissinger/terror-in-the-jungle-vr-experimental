@@ -161,6 +161,7 @@ export class CombatantCombat {
           point: playerHit.point,
           distance: combatant.position.distanceTo(playerPosition),
           headshot: playerHit.headshot
+          // Note: no combatant field here since player was hit directly
         };
       } else {
         combatant.consecutiveMisses++;
@@ -243,14 +244,19 @@ export class CombatantCombat {
 
       if (hit) {
         this.impactEffectsPool.spawn(hit.point, shotRay.direction.clone().negate());
-        const damage = combatant.gunCore.computeDamage(hit.distance, hit.headshot);
-        this.applyDamage(hit.combatant, damage, combatant, squads);
 
-        if (hit.headshot) {
-          console.log(`🎯 Headshot! ${combatant.faction} -> ${hit.combatant.faction}`);
+        // Handle damage for combatant hits (not player)
+        if (hit.combatant) {
+          const damage = combatant.gunCore.computeDamage(hit.distance, hit.headshot);
+          this.applyDamage(hit.combatant, damage, combatant, squads);
+
+          if (hit.headshot) {
+            console.log(`🎯 Headshot! ${combatant.faction} -> ${hit.combatant.faction}`);
+          }
         }
+        // For player hits, damage is already applied in tryFireWeapon
       }
-    } else if (hit) {
+    } else if (hit && hit.combatant) {
       const damage = combatant.gunCore.computeDamage(hit.distance, hit.headshot);
       this.applyDamage(hit.combatant, damage, combatant, squads);
     }
