@@ -42,6 +42,9 @@ export class VRManager implements GameSystem {
   // Reference to weapon system for VR weapon attachment
   private firstPersonWeapon?: any;
 
+  // Reference to player controller for position sync
+  private playerController?: any;
+
   // Button press cooldowns to prevent multiple triggers
   private buttonCooldowns = {
     aButton: false,
@@ -109,8 +112,16 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
-    // Store current camera position before moving to VR group
-    const currentPosition = this.camera.position.clone();
+    // Get current player position from PlayerController (not camera position)
+    let currentPlayerPosition = new THREE.Vector3(0, 5, -50); // Default fallback
+    if (this.playerController && typeof this.playerController.getPlayerPosition === 'function') {
+      currentPlayerPosition = this.playerController.getPlayerPosition().clone();
+    } else {
+      // Fallback: use camera position if PlayerController not available
+      currentPlayerPosition = this.camera.position.clone();
+    }
+
+    console.log(`🥽 Using player position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
 
     // Now that VR is active, move camera to VR group and apply VR settings
     this.camera.parent?.remove(this.camera);
@@ -123,7 +134,7 @@ export class VRManager implements GameSystem {
     this.camera.position.set(0, 1.6, 0);
 
     // Position VR player group at current game position to maintain terrain alignment
-    this.vrPlayerGroup.position.copy(currentPosition);
+    this.vrPlayerGroup.position.copy(currentPlayerPosition);
     this.vrPlayerGroup.position.y -= 1.6; // Offset for camera height within group
     this.vrPlayerGroup.rotation.set(0, 0, 0);
 
@@ -328,5 +339,10 @@ export class VRManager implements GameSystem {
   // Set reference to weapon system for VR weapon attachment
   setFirstPersonWeapon(firstPersonWeapon: any): void {
     this.firstPersonWeapon = firstPersonWeapon;
+  }
+
+  // Set reference to player controller for position sync
+  setPlayerController(playerController: any): void {
+    this.playerController = playerController;
   }
 }

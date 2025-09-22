@@ -823,4 +823,9 @@ Escape - Release pointer lock / Exit helicopter
   getHelicopterId(): string | null {
     return this.playerState.helicopterId;
   }
+
+  // Get current player position for VR sync
+  getPlayerPosition(): THREE.Vector3 {
+    return this.playerState.position.clone();
+  }
 }
