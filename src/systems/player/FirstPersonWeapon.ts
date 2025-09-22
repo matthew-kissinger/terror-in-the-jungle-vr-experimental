@@ -598,8 +598,9 @@ export class FirstPersonWeapon implements GameSystem {
     this.vr3DWeapon.scale.set(0.6, 0.6, 0.6);
 
     // Position weapon in hand (adjust for natural grip)
-    this.vr3DWeapon.position.set(0, -0.1, 0.15); // Slightly forward and down from grip
-    this.vr3DWeapon.rotation.set(0, 0, Math.PI / 12); // Slight upward angle
+    this.vr3DWeapon.position.set(0, -0.05, -0.1); // Slightly forward and down from grip
+    // Fix rotation so barrel points forward (no 90 degree offset)
+    this.vr3DWeapon.rotation.set(0, 0, 0); // Barrel points straight ahead
 
     // Get muzzle reference for VR aiming
     this.vrMuzzleRef = this.vr3DWeapon.getObjectByName('muzzle');
@@ -645,24 +646,20 @@ export class FirstPersonWeapon implements GameSystem {
 
 
   public attachVRWeapon(): void {
-    // Use either 3D weapon model or regular weapon rig for VR
-    const weaponToAttach = this.vr3DWeapon || this.weaponRig;
-    if (!weaponToAttach || this.vrWeaponAttached) return;
+    if (this.vrWeaponAttached) return;
 
     // Get right controller from either VRSystem (new) or VRManager (old)
     const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
-    if (rightController) {
-      // If using regular weapon rig, remove from overlay scene first
-      if (!this.vr3DWeapon && this.weaponRig) {
-        this.weaponScene.remove(this.weaponRig);
+    if (!rightController) return;
 
-        // Rotate weapon so barrel points forward (fix 90 degree offset)
-        this.weaponRig.rotation.set(0, -Math.PI / 2, 0); // Rotate 90 degrees left
-        this.weaponRig.scale.set(0.15, 0.15, 0.15); // Scale down for VR
-        this.weaponRig.position.set(0, -0.05, -0.1); // Offset slightly
-      }
+    // Create VR 3D weapon if it doesn't exist yet
+    if (!this.vr3DWeapon) {
+      this.createVRWeapon();
+    }
 
-      rightController.add(weaponToAttach);
+    // Use the 3D weapon model for VR (not the overlay weapon)
+    if (this.vr3DWeapon) {
+      rightController.add(this.vr3DWeapon);
       this.vrWeaponAttached = true;
 
       // Show VR aiming system
@@ -680,24 +677,12 @@ export class FirstPersonWeapon implements GameSystem {
   }
 
   public detachVRWeapon(): void {
-    const weaponToDetach = this.vr3DWeapon || this.weaponRig;
-    if (!weaponToDetach || !this.vrWeaponAttached) return;
+    if (!this.vrWeaponAttached || !this.vr3DWeapon) return;
 
     const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
     if (rightController) {
-      rightController.remove(weaponToDetach);
+      rightController.remove(this.vr3DWeapon);
       this.vrWeaponAttached = false;
-
-      // If using regular weapon rig, restore it to overlay scene
-      if (!this.vr3DWeapon && this.weaponRig) {
-        // Reset weapon transform
-        this.weaponRig.rotation.set(0, 0, 0);
-        this.weaponRig.scale.set(1, 1, 1);
-        this.weaponRig.position.set(0, 0, 0);
-
-        // Add back to overlay scene
-        this.weaponScene.add(this.weaponRig);
-      }
 
       // Hide VR aiming system
       if (this.vrAimingLaser) this.vrAimingLaser.visible = false;
