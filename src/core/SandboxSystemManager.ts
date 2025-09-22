@@ -195,6 +195,11 @@ export class SandboxSystemManager {
       this.cameraRig.setChunkManager(this.chunkManager);
     }
 
+    // Connect camera rig to billboard system for VR support
+    if (this.cameraRig && this.globalBillboardSystem) {
+      this.globalBillboardSystem.setCameraRig(this.cameraRig);
+    }
+
     // Connect systems with chunk manager
     this.playerController.setChunkManager(this.chunkManager);
     this.playerController.setGameModeManager(this.gameModeManager);

@@ -10,6 +10,7 @@ export class GlobalBillboardSystem implements GameSystem {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
   private assetLoader: AssetLoader;
+  private cameraRig?: any; // Reference to camera rig for VR world position
 
   // GPU system for vegetation (performance critical)
   private gpuVegetationSystem: GPUBillboardSystem;
@@ -53,10 +54,25 @@ export class GlobalBillboardSystem implements GameSystem {
 
   update(deltaTime: number): void {
     if (this.useGPUForVegetation) {
-      this.gpuVegetationSystem.update(this.camera, deltaTime);
+      // Get world position for billboarding
+      let worldPosition: THREE.Vector3;
+      if (this.cameraRig && this.cameraRig.getIsInVR()) {
+        // In VR, use dolly position + camera local position for actual world position
+        worldPosition = new THREE.Vector3();
+        this.camera.getWorldPosition(worldPosition);
+      } else {
+        // In desktop, camera position is correct
+        worldPosition = this.camera.position;
+      }
+
+      this.gpuVegetationSystem.updateWithWorldPosition(this.camera, worldPosition, deltaTime);
     } else if (this.renderer) {
       this.renderer.update(deltaTime);
     }
+  }
+
+  setCameraRig(cameraRig: any): void {
+    this.cameraRig = cameraRig;
   }
 
   dispose(): void {

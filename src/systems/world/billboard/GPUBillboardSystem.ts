@@ -305,6 +305,15 @@ export class GPUBillboardVegetation {
     }
   }
 
+  // Update with explicit world position (for VR)
+  updateWithWorldPosition(camera: THREE.Camera, worldPosition: THREE.Vector3, time: number): void {
+    this.material.uniforms.cameraPosition.value.copy(worldPosition);
+    this.material.uniforms.time.value = time;
+    if (camera instanceof THREE.PerspectiveCamera) {
+      this.material.uniforms.viewMatrix.value.copy(camera.matrixWorldInverse);
+    }
+  }
+
   // Get current instance count
   getInstanceCount(): number {
     return this.activeCount;
@@ -446,6 +455,15 @@ export class GPUBillboardSystem {
 
     this.vegetationTypes.forEach(vegetation => {
       vegetation.update(camera, time);
+    });
+  }
+
+  // Update with explicit world position (for VR)
+  updateWithWorldPosition(camera: THREE.Camera, worldPosition: THREE.Vector3, deltaTime: number): void {
+    const time = performance.now() * 0.001; // Convert to seconds
+
+    this.vegetationTypes.forEach(vegetation => {
+      vegetation.updateWithWorldPosition(camera, worldPosition, time);
     });
   }
 
