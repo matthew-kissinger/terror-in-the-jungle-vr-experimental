@@ -123,14 +123,20 @@ export class SandboxRenderer {
 
   showRenderer(): void {
     this.renderer.domElement.style.display = 'block';
-    // Show VR button when renderer is shown
-    this.showVRButton();
+    // Don't show VR button yet - wait for game to be ready
   }
 
   showVRButton(): void {
     if (this.vrButton && !this.vrButton.parentElement) {
       document.body.appendChild(this.vrButton);
+      console.log('🥽 VR button now available');
     }
+  }
+
+  // Call this when game is ready and player is positioned
+  enableVRButton(): void {
+    console.log('🥽 Game ready - enabling VR button');
+    this.showVRButton();
   }
 
   hideRenderer(): void {

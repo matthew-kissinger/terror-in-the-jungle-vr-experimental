@@ -114,7 +114,33 @@ export class VRManager implements GameSystem {
 
     // Use camera's current world position - this is exactly where the player is in desktop mode
     const currentPlayerPosition = this.camera.position.clone();
-    console.log(`🥽 Entering VR from desktop position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
+    console.log(`🥽 Raw camera position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
+
+    // Validate position - check if we're at a suspicious default position
+    const isAtCrossroads = Math.abs(currentPlayerPosition.x) < 0.1 && Math.abs(currentPlayerPosition.z) < 0.1;
+    const isAtWaterLevel = currentPlayerPosition.y < 3; // Below normal player height
+    const isAtDefaultSpawn = Math.abs(currentPlayerPosition.z + 50) < 0.1; // Near (0, ?, -50)
+
+    if (isAtCrossroads || isAtWaterLevel || isAtDefaultSpawn) {
+      console.warn(`🥽 ⚠️ Suspicious VR spawn position detected:`);
+      console.warn(`🥽 - At crossroads: ${isAtCrossroads} (${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)})`);
+      console.warn(`🥽 - At water level: ${isAtWaterLevel} (y=${currentPlayerPosition.y.toFixed(1)})`);
+      console.warn(`🥽 - At default spawn: ${isAtDefaultSpawn} (z=${currentPlayerPosition.z.toFixed(1)})`);
+
+      // Try to get position from PlayerController as backup
+      if (this.playerController && typeof this.playerController.getPlayerPosition === 'function') {
+        const playerControllerPos = this.playerController.getPlayerPosition();
+        console.log(`🥽 Trying PlayerController position: ${playerControllerPos.x.toFixed(1)}, ${playerControllerPos.y.toFixed(1)}, ${playerControllerPos.z.toFixed(1)}`);
+
+        // Use PlayerController position if it seems more reasonable
+        if (playerControllerPos.y >= 3 && !(Math.abs(playerControllerPos.x) < 0.1 && Math.abs(playerControllerPos.z) < 0.1)) {
+          console.log(`🥽 Using PlayerController position instead`);
+          currentPlayerPosition.copy(playerControllerPos);
+        }
+      }
+    }
+
+    console.log(`🥽 Final VR spawn position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
 
     // Now that VR is active, move camera to VR group and apply VR settings
     this.camera.parent?.remove(this.camera);
@@ -131,8 +157,7 @@ export class VRManager implements GameSystem {
     this.vrPlayerGroup.position.y -= 1.6; // Offset for camera height within group
     this.vrPlayerGroup.rotation.set(0, 0, 0);
 
-    console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
-    console.log(`🥽 Camera position within VR group: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`);
+    console.log(`🥽 VR player group final position: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
 
     // Attach VR weapon to controller
     if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {

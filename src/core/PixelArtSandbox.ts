@@ -182,6 +182,9 @@ export class PixelArtSandbox {
           controller.setGameStarted(true);
         }
 
+        // Now that player is positioned and game is ready, enable VR button
+        this.sandboxRenderer.enableVRButton();
+
         console.log('🖱️ Click anywhere to enable mouse look!');
 
         // Start ambient audio
