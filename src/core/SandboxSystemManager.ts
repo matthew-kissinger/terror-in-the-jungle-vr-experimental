@@ -222,6 +222,10 @@ export class SandboxSystemManager {
       this.vrManager.setFirstPersonWeapon(this.firstPersonWeapon);
       this.vrManager.setPlayerController(this.playerController);
     }
+    // Also connect new VR system to weapon
+    if (this.vrSystem) {
+      this.firstPersonWeapon.setVRSystem(this.vrSystem);
+    }
     this.hudSystem.setCombatantSystem(this.combatantSystem);
     this.hudSystem.setZoneManager(this.zoneManager);
     this.hudSystem.setTicketSystem(this.ticketSystem);

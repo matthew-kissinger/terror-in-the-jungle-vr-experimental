@@ -13,6 +13,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { AmmoManager } from '../weapons/AmmoManager';
 import { ZoneManager } from '../world/ZoneManager';
 import { VRManager } from '../vr/VRManager';
+import { VRSystem } from '../vr/VRSystem';
 
 export class FirstPersonWeapon implements GameSystem {
   private scene: THREE.Scene;
@@ -73,6 +74,7 @@ export class FirstPersonWeapon implements GameSystem {
   private ammoManager: AmmoManager;
   private zoneManager?: ZoneManager;
   private vrManager?: VRManager;
+  private vrSystem?: VRSystem;
 
   // Reload animation state
   private reloadAnimationProgress = 0;
@@ -207,22 +209,32 @@ export class FirstPersonWeapon implements GameSystem {
     this.gunCore.cooldown(deltaTime);
 
     // Handle VR controller firing
-    if (this.vrManager?.isVRActive()) {
-      const inputs = this.vrManager.getControllerInputs();
+    const isVRActive = this.vrSystem?.isVRActive() || this.vrManager?.isVRActive();
+    if (isVRActive) {
+      // Attach weapon to VR controller if not already attached
+      if (!this.vrWeaponAttached) {
+        this.attachVRWeapon();
+      }
+
+      const inputs = this.vrManager?.getControllerInputs() || { rightTrigger: 0 };
       if (inputs.rightTrigger > 0 && !this.isReloadAnimating) {
         this.tryFireVR();
       }
 
-      // Update VR aiming system
+      // Update VR weapon position and rotation
       if (this.vrWeaponAttached) {
-        this.updateVRAiming();
+        this.updateVRWeapon();
       }
 
       // Handle VR B button for reload
-      if (this.vrManager.isButtonPressed('bButton') && !this.isReloadAnimating) {
+      if (this.vrManager?.isButtonPressed('bButton') && !this.isReloadAnimating) {
         this.startReload();
       }
     } else {
+      // Detach weapon from VR if we exit VR
+      if (this.vrWeaponAttached) {
+        this.detachVRWeapon();
+      }
       // Auto-fire while mouse is held (desktop mode)
       if (this.isFiring) {
         this.tryFire();
@@ -571,6 +583,11 @@ export class FirstPersonWeapon implements GameSystem {
     this.vrManager = vrManager;
   }
 
+  setVRSystem(vrSystem: VRSystem): void {
+    this.vrSystem = vrSystem;
+  }
+
+
   private createVRWeapon(): void {
     if (!this.vrManager) return;
 
@@ -626,47 +643,26 @@ export class FirstPersonWeapon implements GameSystem {
     console.log('🎯 VR aiming system created');
   }
 
-  private updateVRAiming(): void {
-    if (!this.vrManager || !this.vrCrosshair || !this.vrMuzzleRef) return;
-
-    // Get right controller for aiming direction
-    const rightController = this.vrManager.getRightController();
-    if (!rightController) return;
-
-    // Get muzzle position in world coordinates
-    const muzzlePosition = new THREE.Vector3();
-    this.vrMuzzleRef.getWorldPosition(muzzlePosition);
-
-    // Get aiming direction from controller
-    const aimDirection = new THREE.Vector3();
-    rightController.getWorldDirection(aimDirection);
-
-    // Perform raycast to find hit point
-    const raycaster = new THREE.Raycaster(muzzlePosition, aimDirection);
-
-    // Default crosshair distance (10 meters if no hit)
-    let hitDistance = 10;
-    let hitPoint = muzzlePosition.clone().add(aimDirection.clone().multiplyScalar(hitDistance));
-
-    // Raycast against terrain and objects (simple implementation for now)
-    // In a full implementation, this would raycast against terrain geometry
-    // For now, place crosshair at fixed distance
-    hitPoint = muzzlePosition.clone().add(aimDirection.clone().multiplyScalar(hitDistance));
-
-    // Position crosshair at hit point
-    this.vrCrosshair.position.copy(hitPoint);
-
-    // Make crosshair face the camera for better visibility
-    const cameraPosition = this.vrManager.getHeadPosition();
-    this.vrCrosshair.lookAt(cameraPosition);
-  }
 
   public attachVRWeapon(): void {
-    if (!this.vrManager || !this.vr3DWeapon || this.vrWeaponAttached) return;
+    // Use either 3D weapon model or regular weapon rig for VR
+    const weaponToAttach = this.vr3DWeapon || this.weaponRig;
+    if (!weaponToAttach || this.vrWeaponAttached) return;
 
-    const rightGrip = this.vrManager.getRightController();
-    if (rightGrip) {
-      rightGrip.add(this.vr3DWeapon);
+    // Get right controller from either VRSystem (new) or VRManager (old)
+    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    if (rightController) {
+      // If using regular weapon rig, remove from overlay scene first
+      if (!this.vr3DWeapon && this.weaponRig) {
+        this.weaponScene.remove(this.weaponRig);
+
+        // Rotate weapon so barrel points forward (fix 90 degree offset)
+        this.weaponRig.rotation.set(0, -Math.PI / 2, 0); // Rotate 90 degrees left
+        this.weaponRig.scale.set(0.15, 0.15, 0.15); // Scale down for VR
+        this.weaponRig.position.set(0, -0.05, -0.1); // Offset slightly
+      }
+
+      rightController.add(weaponToAttach);
       this.vrWeaponAttached = true;
 
       // Show VR aiming system
@@ -677,13 +673,31 @@ export class FirstPersonWeapon implements GameSystem {
     }
   }
 
-  public detachVRWeapon(): void {
-    if (!this.vrManager || !this.vr3DWeapon || !this.vrWeaponAttached) return;
+  private updateVRWeapon(): void {
+    // The weapon is attached to the controller, so it moves automatically
+    // We can add any per-frame adjustments here if needed
+    // For example, recoil effects or aiming adjustments
+  }
 
-    const rightGrip = this.vrManager.getRightController();
-    if (rightGrip) {
-      rightGrip.remove(this.vr3DWeapon);
+  public detachVRWeapon(): void {
+    const weaponToDetach = this.vr3DWeapon || this.weaponRig;
+    if (!weaponToDetach || !this.vrWeaponAttached) return;
+
+    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    if (rightController) {
+      rightController.remove(weaponToDetach);
       this.vrWeaponAttached = false;
+
+      // If using regular weapon rig, restore it to overlay scene
+      if (!this.vr3DWeapon && this.weaponRig) {
+        // Reset weapon transform
+        this.weaponRig.rotation.set(0, 0, 0);
+        this.weaponRig.scale.set(1, 1, 1);
+        this.weaponRig.position.set(0, 0, 0);
+
+        // Add back to overlay scene
+        this.weaponScene.add(this.weaponRig);
+      }
 
       // Hide VR aiming system
       if (this.vrAimingLaser) this.vrAimingLaser.visible = false;
