@@ -826,7 +826,6 @@ Escape - Release pointer lock / Exit helicopter
 
   // Get current player position for VR sync
   getPlayerPosition(): THREE.Vector3 {
-    console.log(`🎮 PlayerController position requested: ${this.playerState.position.x.toFixed(1)}, ${this.playerState.position.y.toFixed(1)}, ${this.playerState.position.z.toFixed(1)}`);
     return this.playerState.position.clone();
   }
 }
