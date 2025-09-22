@@ -191,7 +191,7 @@ export class VRInput implements InputSource {
       if (hand === 'left') {
         // Left thumbstick for movement
         this.state.movement.x = this.applyDeadzone(gamepad.axes[2] || 0);
-        this.state.movement.y = -this.applyDeadzone(gamepad.axes[3] || 0); // Invert Y
+        this.state.movement.y = this.applyDeadzone(gamepad.axes[3] || 0); // Don't invert here, let VRSystem handle it
 
         // Left trigger for secondary fire
         this.state.secondaryFire = gamepad.buttons[0]?.value > 0.5;
