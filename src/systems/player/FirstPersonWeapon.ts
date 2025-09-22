@@ -471,19 +471,34 @@ export class FirstPersonWeapon implements GameSystem {
 
     this.muzzleFlashPool.spawn(muzzlePos, forward, 1.2);
 
-    // Visual recoil: kick weapon and camera slightly, and persist kick via controller
-    const kick = this.gunCore.getRecoilOffsetDeg();
-    // Fixed: positive pitch makes the aim go UP (as it should with recoil)
-    if (this.playerController) this.playerController.applyRecoil(THREE.MathUtils.degToRad(kick.pitch), THREE.MathUtils.degToRad(kick.yaw));
-    // Apply recoil impulse to weapon spring system (moderate recoil)
-    if (this.weaponRig) {
-      // Add impulse to velocity for spring physics
-      this.weaponRecoilVelocity.z -= 2.2; // Backward kick
-      this.weaponRecoilVelocity.y += 1.2; // Upward kick
-      this.weaponRecoilVelocity.rotX += 0.12; // Rotation kick
+    // Check if we're in VR or desktop mode
+    const isVRActive = this.vrSystem?.isVRActive() || this.vrManager?.isVRActive();
 
-      // Small random horizontal kick for variety
-      this.weaponRecoilVelocity.x += (Math.random() - 0.5) * 0.4;
+    if (!isVRActive) {
+      // DESKTOP: Apply visual recoil to camera and weapon
+      const kick = this.gunCore.getRecoilOffsetDeg();
+      // Apply camera recoil (pitch up, random yaw)
+      if (this.playerController) {
+        this.playerController.applyRecoil(
+          THREE.MathUtils.degToRad(kick.pitch),
+          THREE.MathUtils.degToRad(kick.yaw)
+        );
+      }
+
+      // Apply weapon visual recoil (spring physics for smooth recovery)
+      if (this.weaponRig) {
+        // Add impulse to velocity for spring physics
+        this.weaponRecoilVelocity.z -= 2.2; // Backward kick
+        this.weaponRecoilVelocity.y += 1.2; // Upward kick
+        this.weaponRecoilVelocity.rotX += 0.12; // Rotation kick
+
+        // Small random horizontal kick for variety
+        this.weaponRecoilVelocity.x += (Math.random() - 0.5) * 0.4;
+      }
+    } else {
+      // VR: No camera shake (would cause motion sickness)
+      // Instead, we'll use haptic feedback
+      this.applyVRHapticRecoil();
     }
     (this as any).lastShotVisualTime = performance.now();
   }
@@ -557,11 +572,8 @@ export class FirstPersonWeapon implements GameSystem {
       }
     }
 
-    // Visual recoil for VR (apply to player camera)
-    const kick = this.gunCore.getRecoilOffsetDeg();
-    if (this.playerController) {
-      this.playerController.applyRecoil(THREE.MathUtils.degToRad(kick.pitch), THREE.MathUtils.degToRad(kick.yaw));
-    }
+    // VR: Apply haptic feedback instead of camera shake
+    this.applyVRHapticRecoil();
 
     (this as any).lastShotVisualTime = performance.now();
   }
@@ -585,6 +597,60 @@ export class FirstPersonWeapon implements GameSystem {
 
   setVRSystem(vrSystem: VRSystem): void {
     this.vrSystem = vrSystem;
+  }
+
+  /**
+   * Apply haptic feedback for VR gun recoil
+   * Professional VR games use haptics instead of camera shake to avoid motion sickness
+   */
+  private applyVRHapticRecoil(): void {
+    // Get the right controller (shooting hand)
+    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    if (!rightController) return;
+
+    // Try to get gamepad from controller's XR input source
+    const xrSession = (this.vrSystem as any)?.renderer?.xr?.getSession() ||
+                      (this.vrManager as any)?.vrSession;
+
+    if (xrSession && xrSession.inputSources) {
+      for (const source of xrSession.inputSources) {
+        if (source.handedness === 'right' && source.gamepad) {
+          const gamepad = source.gamepad;
+
+          // Apply haptic pulse for recoil feel
+          if (gamepad.hapticActuators && gamepad.hapticActuators[0]) {
+            // Strong pulse for gun recoil
+            // Intensity: 0.8 (80%) for strong kick
+            // Duration: 100ms for sharp recoil feel
+            gamepad.hapticActuators[0].pulse(0.8, 100);
+
+            // For automatic weapons, you might want shorter, lighter pulses:
+            // gamepad.hapticActuators[0].pulse(0.5, 50);
+          }
+          break;
+        }
+      }
+    }
+
+    // Optional: Add visual recoil to the VR weapon itself (small kick animation)
+    if (this.vr3DWeapon) {
+      // Small visual kick that settles quickly
+      // This is much subtler than desktop recoil
+      const originalZ = this.vr3DWeapon.position.z;
+      const originalRotX = this.vr3DWeapon.rotation.x;
+
+      // Kick back
+      this.vr3DWeapon.position.z += 0.02;
+      this.vr3DWeapon.rotation.x -= 0.05;
+
+      // Animate back to original position
+      setTimeout(() => {
+        if (this.vr3DWeapon) {
+          this.vr3DWeapon.position.z = originalZ;
+          this.vr3DWeapon.rotation.x = originalRotX;
+        }
+      }, 100);
+    }
   }
 
 
