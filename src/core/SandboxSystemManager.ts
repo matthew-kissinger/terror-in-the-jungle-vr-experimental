@@ -191,6 +191,7 @@ export class SandboxSystemManager {
     // Connect modern systems
     if (this.modernPlayerController) {
       this.modernPlayerController.setChunkManager(this.chunkManager);
+      this.modernPlayerController.setGameModeManager(this.gameModeManager);
       this.cameraRig.setChunkManager(this.chunkManager);
     }
 

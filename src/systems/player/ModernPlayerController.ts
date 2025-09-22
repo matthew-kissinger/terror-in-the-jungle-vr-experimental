@@ -59,6 +59,7 @@ export class ModernPlayerController implements GameSystem {
   // References
   private scene: THREE.Scene;
   private chunkManager?: any; // Terrain system
+  private gameModeManager?: any; // Game mode system
 
   constructor(
     scene: THREE.Scene,
@@ -319,19 +320,53 @@ export class ModernPlayerController implements GameSystem {
    * Get spawn position from game mode
    */
   private getSpawnPosition(): THREE.Vector3 {
-    // Get spawn from game mode or use default
-    let spawnPos = new THREE.Vector3(0, 5, -50);
+    // Try to get spawn from game mode manager
+    if (this.gameModeManager) {
+      const config = this.gameModeManager.getCurrentConfig();
 
-    // TODO: Get actual spawn from game mode manager when available
-    // For now, check terrain height at spawn position
-    if (this.chunkManager) {
-      const terrainHeight = this.chunkManager.getEffectiveHeightAt(spawnPos.x, spawnPos.z);
-      if (terrainHeight > -100) { // Valid terrain
-        spawnPos.y = terrainHeight + 2; // Player height above terrain
+      // Find the main US HQ (player spawn)
+      const usMainHQ = config.zones.find((z: any) =>
+        z.isHomeBase &&
+        z.owner === 'US' &&
+        (z.id.includes('main') || z.id === 'us_base')
+      );
+
+      if (usMainHQ) {
+        const spawnPos = usMainHQ.position.clone();
+
+        // Get actual terrain height at spawn position
+        if (this.chunkManager) {
+          const terrainHeight = this.chunkManager.getEffectiveHeightAt(spawnPos.x, spawnPos.z);
+
+          if (terrainHeight === 0 || terrainHeight < -100) {
+            console.warn(`⚠️ No terrain at spawn position ${spawnPos.x}, ${spawnPos.z} - using fallback height`);
+            spawnPos.y = 10; // Higher fallback to avoid falling through
+          } else {
+            spawnPos.y = terrainHeight + 2; // Player height above terrain
+          }
+
+          console.log(`🎯 Spawning at US main HQ - Terrain height: ${terrainHeight.toFixed(1)}, Player at: ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+        } else {
+          spawnPos.y = 5; // Default height if no terrain manager
+        }
+
+        return spawnPos;
       }
     }
 
-    return spawnPos;
+    // Fallback spawn position
+    const defaultSpawn = new THREE.Vector3(0, 5, -50);
+
+    // Check terrain height at default spawn
+    if (this.chunkManager) {
+      const terrainHeight = this.chunkManager.getEffectiveHeightAt(defaultSpawn.x, defaultSpawn.z);
+      if (terrainHeight > -100) { // Valid terrain
+        defaultSpawn.y = terrainHeight + 2; // Player height above terrain
+      }
+    }
+
+    console.log('📍 Using default spawn position');
+    return defaultSpawn;
   }
 
   /**
@@ -394,6 +429,10 @@ export class ModernPlayerController implements GameSystem {
   public setChunkManager(chunkManager: any): void {
     this.chunkManager = chunkManager;
     this.cameraRig.setChunkManager(chunkManager);
+  }
+
+  public setGameModeManager(gameModeManager: any): void {
+    this.gameModeManager = gameModeManager;
   }
 
   /**
