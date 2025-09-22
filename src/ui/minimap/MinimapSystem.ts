@@ -118,9 +118,10 @@ export class MinimapSystem implements GameSystem {
     // Get camera direction for rotation
     const cameraDir = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDir);
-    // Yaw measured from true north (+Z) turning clockwise toward +X (east)
-    // Fixed: Changed from -cameraDir.z to cameraDir.z to match actual forward direction
-    this.playerRotation = Math.atan2(cameraDir.x, cameraDir.z);
+    // For rotating minimap: we need the negative angle because we rotate the world, not the player
+    // When player faces north (+Z), we rotate world by 0
+    // When player turns right (east/+X), we rotate world left (negative)
+    this.playerRotation = -Math.atan2(cameraDir.x, cameraDir.z);
 
     // Throttle updates
     const now = Date.now();
