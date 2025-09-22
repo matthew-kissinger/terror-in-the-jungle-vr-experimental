@@ -112,9 +112,10 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
-    // Use camera's current world position - this is exactly where the player is in desktop mode
-    const currentPlayerPosition = this.camera.position.clone();
-    console.log(`🥽 Entering VR from position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
+    // Get camera's WORLD position, not local position
+    const currentPlayerPosition = new THREE.Vector3();
+    this.camera.getWorldPosition(currentPlayerPosition);
+    console.log(`🥽 Entering VR from world position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
 
     // Now that VR is active, move camera to VR group and apply VR settings
     this.camera.parent?.remove(this.camera);
@@ -132,6 +133,13 @@ export class VRManager implements GameSystem {
     this.vrPlayerGroup.rotation.set(0, 0, 0);
 
     console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+
+    // Sync VR position back to PlayerController
+    if (this.playerController && typeof this.playerController.setPosition === 'function') {
+      // Set the player controller to the VR group position (which represents player feet position)
+      this.playerController.setPosition(this.vrPlayerGroup.position.clone());
+      console.log('🥽 Synced VR position to PlayerController');
+    }
 
     // Attach VR weapon to controller
     if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {
