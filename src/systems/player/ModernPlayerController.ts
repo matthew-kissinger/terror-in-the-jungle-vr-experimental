@@ -116,8 +116,8 @@ export class ModernPlayerController implements GameSystem {
     // Update camera rig position
     this.cameraRig.setPosition(position);
 
-    // Reset look direction
-    this.yaw = 0;
+    // Reset look direction - face north (positive Z)
+    this.yaw = Math.PI; // Face north instead of south
     this.pitch = 0;
 
     console.log(`🎯 Player spawned at: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
@@ -164,11 +164,8 @@ export class ModernPlayerController implements GameSystem {
    * Update VR movement (handled by VRSystem mostly)
    */
   private updateVR(deltaTime: number, input: InputState): void {
-    // VRSystem handles most VR movement through InputManager
-    // We just need to sync the position back
-
-    const rigPosition = this.cameraRig.getPosition();
-    this.state.position.copy(rigPosition);
+    // Handle VR movement with physics
+    this.updateMovement(input, deltaTime);
 
     // Handle VR-specific actions
     this.handleActions(input, deltaTime);
@@ -211,7 +208,7 @@ export class ModernPlayerController implements GameSystem {
       const speed = input.sprint ? this.state.runSpeed : this.state.walkSpeed;
       const targetVelocity = new THREE.Vector3();
       targetVelocity.addScaledVector(right, input.movement.x * speed);
-      targetVelocity.addScaledVector(forward, -input.movement.y * speed);
+      targetVelocity.addScaledVector(forward, input.movement.y * speed); // Fixed: removed negation
 
       // Apply acceleration
       const acceleration = this.state.isGrounded ? this.ACCELERATION : this.ACCELERATION * 0.2;
@@ -274,11 +271,9 @@ export class ModernPlayerController implements GameSystem {
     // Update position
     this.state.position.copy(newPosition);
 
-    // Update camera rig
-    if (!this.cameraRig.getIsInVR()) {
-      // In desktop mode, update camera position
-      this.cameraRig.setPosition(this.state.position);
-    }
+    // Always update camera rig position for both VR and desktop
+    // This ensures proper terrain collision in VR mode
+    this.cameraRig.setPosition(this.state.position);
   }
 
   /**
