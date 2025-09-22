@@ -105,20 +105,9 @@ export class SandboxRenderer {
   }
 
   private setupVR(): void {
-    // Enable WebXR VR support
-    this.renderer.xr.enabled = true;
-
-    // Set reference space to local-floor for room-scale VR
-    this.renderer.xr.setReferenceSpaceType('local-floor');
-
-    // Create VR button and add to document
-    this.vrButton = VRButton.createButton(this.renderer);
-    this.vrButton.style.position = 'fixed';
-    this.vrButton.style.bottom = '20px';
-    this.vrButton.style.right = '20px';
-    this.vrButton.style.zIndex = '10004'; // Above other UI elements
-
-    console.log('🥽 WebXR VR support enabled');
+    // Don't enable WebXR yet - wait until game is ready
+    // This prevents browser from showing VR UI before player is positioned
+    console.log('🥽 WebXR support prepared (not enabled yet)');
   }
 
   showRenderer(): void {
@@ -135,8 +124,25 @@ export class SandboxRenderer {
 
   // Call this when game is ready and player is positioned
   enableVRButton(): void {
-    console.log('🥽 Game ready - enabling VR button');
+    console.log('🥽 Game ready - initializing WebXR and VR button');
+
+    // NOW enable WebXR when game is actually ready
+    this.renderer.xr.enabled = true;
+
+    // Set reference space to local-floor for room-scale VR
+    this.renderer.xr.setReferenceSpaceType('local-floor');
+
+    // Create VR button only when game is ready
+    this.vrButton = VRButton.createButton(this.renderer);
+    this.vrButton.style.position = 'fixed';
+    this.vrButton.style.bottom = '20px';
+    this.vrButton.style.right = '20px';
+    this.vrButton.style.zIndex = '10004'; // Above other UI elements
+
+    // Now add it to DOM
     this.showVRButton();
+
+    console.log('🥽 WebXR fully enabled and VR button available');
   }
 
   hideRenderer(): void {
