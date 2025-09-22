@@ -511,11 +511,17 @@ export class PlayerController implements GameSystem {
   }
 
   private updateCamera(): void {
+    if (this.vrManager?.isVRActive()) {
+      // XR runtime drives the camera pose while in VR
+      return;
+    }
+
     if (this.playerState.isInHelicopter) {
       this.updateHelicopterCamera();
-    } else {
-      this.updateFirstPersonCamera();
+      return;
     }
+
+    this.updateFirstPersonCamera();
   }
 
   private updateFirstPersonCamera(): void {
@@ -620,7 +626,16 @@ export class PlayerController implements GameSystem {
 
   setPosition(position: THREE.Vector3): void {
     this.playerState.position.copy(position);
-    this.camera.position.copy(position);
+
+    if (this.vrManager?.isVRActive()) {
+      // When in VR, move the XR player root instead of the head camera
+      this.vrManager.setVRPlayerPosition(position.clone());
+      // Keep the headset anchor at standard standing height inside the group
+      this.camera.position.set(0, 1.6, 0);
+    } else {
+      this.camera.position.copy(position);
+    }
+
     // Reset velocity to prevent carrying momentum
     this.playerState.velocity.set(0, 0, 0);
     this.playerState.isGrounded = false;
@@ -686,8 +701,7 @@ Escape - Release pointer lock / Exit helicopter
   }
 
   teleport(position: THREE.Vector3): void {
-    this.playerState.position.copy(position);
-    this.playerState.velocity.set(0, 0, 0);
+    this.setPosition(position);
   }
 
   setChunkManager(chunkManager: ImprovedChunkManager): void {
