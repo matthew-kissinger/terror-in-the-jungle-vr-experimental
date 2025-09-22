@@ -384,8 +384,8 @@ export class VRSystem implements GameSystem {
       // Calculate movement vector
       const movement = new THREE.Vector3();
       movement.addScaledVector(rightDirection, inputState.movement.x * this.locomotionSpeed * deltaTime);
-      // Don't negate Y for VR controllers - forward should be positive Y on thumbstick
-      movement.addScaledVector(headDirection, inputState.movement.y * this.locomotionSpeed * deltaTime);
+      // Negate Y for VR controllers - pushing up on thumbstick should move forward
+      movement.addScaledVector(headDirection, -inputState.movement.y * this.locomotionSpeed * deltaTime);
 
       // Apply movement to camera rig
       this.cameraRig.move(movement);
