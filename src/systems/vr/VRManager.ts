@@ -42,19 +42,11 @@ export class VRManager implements GameSystem {
 
     this.controllerModelFactory = new XRControllerModelFactory();
 
-    // Create VR player group
+    // Create VR player group (but don't add camera yet)
     this.vrPlayerGroup = new THREE.Group();
     this.vrPlayerGroup.name = 'VRPlayerGroup';
 
-    // Scale the entire player group for VR
-    this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
-
-    // Add camera to VR group
-    this.vrPlayerGroup.add(this.camera);
-
-    // Set VR standing height (1.6m in VR space, scaled to game units)
-    this.camera.position.set(0, 1.6 / this.VR_SCALE, 0);
-
+    // Don't scale or modify camera in constructor - only when VR is active
     this.scene.add(this.vrPlayerGroup);
 
     this.setupControllers();
@@ -102,6 +94,16 @@ export class VRManager implements GameSystem {
     this.vrSession = this.renderer.xr.getSession();
     console.log('🥽 VR session started');
 
+    // Now that VR is active, move camera to VR group and apply VR settings
+    this.camera.parent?.remove(this.camera);
+    this.vrPlayerGroup.add(this.camera);
+
+    // Scale the VR player group for proper VR scale
+    this.vrPlayerGroup.scale.setScalar(this.VR_SCALE);
+
+    // Set VR standing height (1.6m in VR space, scaled to game units)
+    this.camera.position.set(0, 1.6 / this.VR_SCALE, 0);
+
     // Reset VR player group position
     this.vrPlayerGroup.position.set(0, 0, 0);
     this.vrPlayerGroup.rotation.set(0, 0, 0);
@@ -110,6 +112,16 @@ export class VRManager implements GameSystem {
   private onVRSessionEnd(): void {
     this.vrSession = null;
     console.log('🥽 VR session ended');
+
+    // Return camera to scene and restore normal positioning
+    this.vrPlayerGroup.remove(this.camera);
+    this.scene.add(this.camera);
+
+    // Reset VR group scale
+    this.vrPlayerGroup.scale.setScalar(1);
+
+    // Reset camera position to normal desktop position
+    this.camera.position.set(0, 1.8, 0);
   }
 
   // Controller event handlers
