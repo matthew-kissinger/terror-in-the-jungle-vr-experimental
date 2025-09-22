@@ -44,7 +44,9 @@
       "Bash(then echo \"✓ $file\")",
       "Bash(else echo \"✗ $file\")",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh workflow:*)"
     ],
     "deny": [],
     "ask": []

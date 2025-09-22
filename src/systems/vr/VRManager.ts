@@ -116,12 +116,15 @@ export class VRManager implements GameSystem {
     let currentPlayerPosition = new THREE.Vector3(0, 5, -50); // Default fallback
     if (this.playerController && typeof this.playerController.getPlayerPosition === 'function') {
       currentPlayerPosition = this.playerController.getPlayerPosition().clone();
+      console.log(`🥽 Got position from PlayerController: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
     } else {
       // Fallback: use camera position if PlayerController not available
       currentPlayerPosition = this.camera.position.clone();
+      console.log(`🥽 PlayerController not available, using camera position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
     }
 
     console.log(`🥽 Using player position: ${currentPlayerPosition.x.toFixed(1)}, ${currentPlayerPosition.y.toFixed(1)}, ${currentPlayerPosition.z.toFixed(1)}`);
+    console.log(`🥽 Camera position before VR: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`);
 
     // Now that VR is active, move camera to VR group and apply VR settings
     this.camera.parent?.remove(this.camera);
@@ -138,7 +141,8 @@ export class VRManager implements GameSystem {
     this.vrPlayerGroup.position.y -= 1.6; // Offset for camera height within group
     this.vrPlayerGroup.rotation.set(0, 0, 0);
 
-    console.log(`🥽 VR player positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+    console.log(`🥽 VR player group positioned at: ${this.vrPlayerGroup.position.x.toFixed(1)}, ${this.vrPlayerGroup.position.y.toFixed(1)}, ${this.vrPlayerGroup.position.z.toFixed(1)}`);
+    console.log(`🥽 Camera position within VR group: ${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`);
 
     // Attach VR weapon to controller
     if (this.firstPersonWeapon && typeof this.firstPersonWeapon.attachVRWeapon === 'function') {
