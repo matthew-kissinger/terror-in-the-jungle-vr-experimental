@@ -21,6 +21,7 @@ import { FullMapSystem } from '../ui/map/FullMapSystem';
 import { CompassSystem } from '../ui/compass/CompassSystem';
 import { HelipadSystem } from '../systems/helicopter/HelipadSystem';
 import { HelicopterModel } from '../systems/helicopter/HelicopterModel';
+import { VRManager } from '../systems/vr/VRManager';
 
 export class SandboxSystemManager {
   private systems: GameSystem[] = [];
@@ -46,6 +47,7 @@ export class SandboxSystemManager {
   public compassSystem!: CompassSystem;
   public helipadSystem!: HelipadSystem;
   public helicopterModel!: HelicopterModel;
+  public vrManager!: VRManager;
 
   async initializeSystems(
     scene: THREE.Scene,
@@ -59,6 +61,12 @@ export class SandboxSystemManager {
     onProgress('core', 0);
 
     this.assetLoader = new AssetLoader();
+
+    // Initialize VR Manager early (needs to be available for other systems)
+    if (sandboxRenderer && sandboxRenderer.renderer) {
+      this.vrManager = new VRManager(scene, camera, sandboxRenderer.renderer);
+    }
+
     onProgress('core', 0.5);
 
     this.globalBillboardSystem = new GlobalBillboardSystem(scene, camera, this.assetLoader);
@@ -122,6 +130,11 @@ export class SandboxSystemManager {
       this.gameModeManager
     ];
 
+    // Add VR Manager if it exists
+    if (this.vrManager) {
+      this.systems.push(this.vrManager);
+    }
+
     onProgress('world', 0.5);
 
     // Initialize all systems
@@ -142,11 +155,17 @@ export class SandboxSystemManager {
     if (sandboxRenderer) {
       this.playerController.setSandboxRenderer(sandboxRenderer);
     }
+    if (this.vrManager) {
+      this.playerController.setVRManager(this.vrManager);
+    }
     this.combatantSystem.setChunkManager(this.chunkManager);
     this.firstPersonWeapon.setPlayerController(this.playerController);
     this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
     this.firstPersonWeapon.setHUDSystem(this.hudSystem);
     this.firstPersonWeapon.setZoneManager(this.zoneManager);
+    if (this.vrManager) {
+      this.firstPersonWeapon.setVRManager(this.vrManager);
+    }
     this.hudSystem.setCombatantSystem(this.combatantSystem);
     this.hudSystem.setZoneManager(this.zoneManager);
     this.hudSystem.setTicketSystem(this.ticketSystem);

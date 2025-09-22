@@ -36,7 +36,15 @@
       "WebFetch(domain:www.sharpcoderblog.com)",
       "Bash(dir:*)",
       "Bash(findstr:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git clone:*)",
+      "Bash(for:*)",
+      "Bash(do if [ -f \"three.js-temp/examples/$file\" ])",
+      "Bash(then echo \"✓ $file\")",
+      "Bash(else echo \"✗ $file\")",
+      "Bash(fi)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

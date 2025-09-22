@@ -12,6 +12,7 @@ import { PlayerController } from './PlayerController';
 import { AudioManager } from '../audio/AudioManager';
 import { AmmoManager } from '../weapons/AmmoManager';
 import { ZoneManager } from '../world/ZoneManager';
+import { VRManager } from '../vr/VRManager';
 
 export class FirstPersonWeapon implements GameSystem {
   private scene: THREE.Scene;
@@ -71,6 +72,7 @@ export class FirstPersonWeapon implements GameSystem {
   private audioManager?: AudioManager;
   private ammoManager: AmmoManager;
   private zoneManager?: ZoneManager;
+  private vrManager?: VRManager;
 
   // Reload animation state
   private reloadAnimationProgress = 0;
@@ -80,6 +82,10 @@ export class FirstPersonWeapon implements GameSystem {
   private reloadTranslation = { x: 0, y: 0, z: 0 };
   private magazineOffset = { x: 0, y: 0, z: 0 }; // Magazine animation offset
   private magazineRotation = { x: 0, y: 0, z: 0 }; // Magazine rotation during reload
+
+  // VR weapon state
+  private vr3DWeapon?: THREE.Group; // 3D weapon model for VR
+  private vrWeaponAttached = false;
   
   constructor(scene: THREE.Scene, camera: THREE.Camera, assetLoader: AssetLoader) {
     this.scene = scene;
@@ -192,9 +198,17 @@ export class FirstPersonWeapon implements GameSystem {
     // Gunplay cooldown
     this.gunCore.cooldown(deltaTime);
 
-    // Auto-fire while mouse is held
-    if (this.isFiring) {
-      this.tryFire();
+    // Handle VR controller firing
+    if (this.vrManager?.isVRActive()) {
+      const inputs = this.vrManager.getControllerInputs();
+      if (inputs.rightTrigger > 0 && !this.isReloadAnimating) {
+        this.tryFireVR();
+      }
+    } else {
+      // Auto-fire while mouse is held (desktop mode)
+      if (this.isFiring) {
+        this.tryFire();
+      }
     }
 
     // Update all effects
@@ -336,6 +350,9 @@ export class FirstPersonWeapon implements GameSystem {
   // Called by main game loop to render weapon overlay
   renderWeapon(renderer: THREE.WebGLRenderer): void {
     if (!this.weaponRig) return;
+
+    // Don't render 2D weapon overlay in VR mode
+    if (this.vrManager?.isVRActive()) return;
     
     // Save current renderer state
     const currentAutoClear = renderer.autoClear;
@@ -441,6 +458,84 @@ export class FirstPersonWeapon implements GameSystem {
     (this as any).lastShotVisualTime = performance.now();
   }
 
+  private tryFireVR(): void {
+    if (!this.combatantSystem || !this.gunCore.canFire() || !this.isEnabled || !this.vrManager) return;
+
+    // Check ammo
+    if (!this.ammoManager.canFire()) {
+      if (this.ammoManager.isEmpty()) {
+        // Play empty click sound
+        console.log('🔫 *click* - Empty magazine!');
+        // Auto-reload if we have reserve ammo
+        if (this.ammoManager.getState().reserveAmmo > 0) {
+          this.startReload();
+        }
+      }
+      return;
+    }
+
+    // Consume ammo
+    if (!this.ammoManager.consumeRound()) return;
+    this.gunCore.registerShot();
+
+    // Play player gunshot sound
+    if (this.audioManager) {
+      this.audioManager.playPlayerGunshot();
+    }
+
+    // Get shooting direction from right controller
+    const shootDirection = this.vrManager.getRightControllerDirection();
+    const rightController = this.vrManager.getRightController();
+
+    // Get controller position for bullet spawn
+    const bulletStart = new THREE.Vector3();
+    rightController.getWorldPosition(bulletStart);
+
+    // Create ray for hitscan
+    const ray = new THREE.Ray(bulletStart, shootDirection);
+
+    // Apply spread
+    const spread = this.gunCore.getSpreadDeg();
+    const spreadRadians = THREE.MathUtils.degToRad(spread);
+    ray.direction.x += (Math.random() - 0.5) * spreadRadians;
+    ray.direction.y += (Math.random() - 0.5) * spreadRadians;
+    ray.direction.normalize();
+
+    // Hitscan damage application
+    const result = this.combatantSystem.handlePlayerShot(ray, (d, head) => this.gunCore.computeDamage(d, head));
+
+    // Spawn impact effect at hit point
+    if (result.hit) {
+      const normal = ray.direction.clone().negate();
+      this.impactEffectsPool.spawn(result.point, normal);
+
+      // Show hit marker
+      if (this.hudSystem) {
+        const hitType = (result as any).killed ? 'kill' : (result as any).headshot ? 'headshot' : 'normal';
+        this.hudSystem.showHitMarker(hitType);
+      }
+    }
+
+    // Spawn muzzle flash at controller position
+    this.muzzleFlashPool.spawn(bulletStart, shootDirection, 1.2);
+
+    // Apply haptic feedback to controller
+    if (rightController && rightController.userData.gamepad) {
+      const gamepad = rightController.userData.gamepad;
+      if (gamepad.hapticActuators && gamepad.hapticActuators[0]) {
+        gamepad.hapticActuators[0].pulse(0.8, 100); // Strong pulse for 100ms
+      }
+    }
+
+    // Visual recoil for VR (apply to player camera)
+    const kick = this.gunCore.getRecoilOffsetDeg();
+    if (this.playerController) {
+      this.playerController.applyRecoil(THREE.MathUtils.degToRad(kick.pitch), THREE.MathUtils.degToRad(kick.yaw));
+    }
+
+    (this as any).lastShotVisualTime = performance.now();
+  }
+
   setHUDSystem(hudSystem: any): void {
     this.hudSystem = hudSystem;
   }
@@ -452,6 +547,10 @@ export class FirstPersonWeapon implements GameSystem {
   setZoneManager(zoneManager: ZoneManager): void {
     this.zoneManager = zoneManager;
     this.ammoManager.setZoneManager(zoneManager);
+  }
+
+  setVRManager(vrManager: VRManager): void {
+    this.vrManager = vrManager;
   }
 
   // Disable weapon (for death)

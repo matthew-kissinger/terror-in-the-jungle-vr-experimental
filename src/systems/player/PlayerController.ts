@@ -5,6 +5,7 @@ import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { GameModeManager } from '../world/GameModeManager';
 import { Faction } from '../combat/types';
 import { HelicopterControls } from '../helicopter/HelicopterPhysics';
+import { VRManager } from '../vr/VRManager';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
@@ -14,6 +15,7 @@ export class PlayerController implements GameSystem {
   private firstPersonWeapon?: any;
   private hudSystem?: any;
   private sandboxRenderer?: any;
+  private vrManager?: VRManager;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -80,8 +82,13 @@ export class PlayerController implements GameSystem {
   update(deltaTime: number): void {
     if (!this.isControlsEnabled) return; // Skip updates when dead
 
+    // Check if we're in VR mode
+    const isVRActive = this.vrManager?.isVRActive() || false;
+
     if (this.playerState.isInHelicopter) {
       this.updateHelicopterControls(deltaTime);
+    } else if (isVRActive) {
+      this.updateVRMovement(deltaTime);
     } else {
       this.updateMovement(deltaTime);
     }
@@ -330,6 +337,73 @@ export class PlayerController implements GameSystem {
     }
 
     this.playerState.position.copy(newPosition);
+  }
+
+  private updateVRMovement(deltaTime: number): void {
+    if (!this.vrManager) return;
+
+    // Get VR controller inputs
+    const inputs = this.vrManager.getControllerInputs();
+
+    // Use left thumbstick for movement
+    const moveX = inputs.leftThumbstick.x;
+    const moveZ = inputs.leftThumbstick.z;
+
+    if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+      // Get head direction for movement orientation
+      const headRotation = this.vrManager.getHeadRotation();
+      const headDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(headRotation);
+      headDirection.y = 0; // Keep movement horizontal
+      headDirection.normalize();
+
+      const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headRotation);
+      headRight.y = 0;
+      headRight.normalize();
+
+      // Calculate movement vector in world space
+      const moveSpeed = this.playerState.isRunning ? this.playerState.runSpeed : this.playerState.speed;
+      const vrMoveSpeed = moveSpeed * 0.1; // Scale for VR (10 game units = 1 VR meter)
+
+      const movement = new THREE.Vector3();
+      movement.addScaledVector(headDirection, -moveZ * vrMoveSpeed * deltaTime);
+      movement.addScaledVector(headRight, moveX * vrMoveSpeed * deltaTime);
+
+      // Apply movement to VR player group
+      this.vrManager.moveVRPlayer(movement);
+
+      // Update player state position to match VR position (for game logic)
+      this.playerState.position.copy(this.vrManager.getVRPlayerPosition());
+    }
+
+    // Handle VR-specific actions (grip buttons, etc.)
+    if (inputs.rightGrip && !this.playerState.isJumping && this.playerState.isGrounded) {
+      // Use right grip for jump in VR
+      this.playerState.velocity.y = this.playerState.jumpForce;
+      this.playerState.isJumping = true;
+      this.playerState.isGrounded = false;
+    }
+
+    // Apply gravity in VR (same as desktop)
+    this.playerState.velocity.y += this.playerState.gravity * deltaTime;
+
+    // Ground collision for VR
+    let groundHeight = 2;
+    if (this.chunkManager) {
+      const vrPos = this.vrManager.getVRPlayerPosition();
+      const effectiveHeight = this.chunkManager.getEffectiveHeightAt(vrPos.x, vrPos.z);
+      groundHeight = effectiveHeight + 2;
+    }
+
+    const currentPos = this.vrManager.getVRPlayerPosition();
+    if (currentPos.y <= groundHeight) {
+      currentPos.y = groundHeight;
+      this.playerState.velocity.y = 0;
+      this.playerState.isGrounded = true;
+      this.playerState.isJumping = false;
+      this.vrManager.setVRPlayerPosition(currentPos);
+    } else {
+      this.playerState.isGrounded = false;
+    }
   }
 
   private updateHelicopterControls(deltaTime: number): void {
@@ -617,6 +691,10 @@ Escape - Release pointer lock / Exit helicopter
 
   setSandboxRenderer(sandboxRenderer: any): void {
     this.sandboxRenderer = sandboxRenderer;
+  }
+
+  setVRManager(vrManager: VRManager): void {
+    this.vrManager = vrManager;
   }
 
   equipWeapon(): void {

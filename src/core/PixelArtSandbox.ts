@@ -267,12 +267,11 @@ Have fun!
   }
 
   public start(): void {
-    this.animate();
+    // Use WebXR-compatible animation loop instead of requestAnimationFrame
+    this.sandboxRenderer.renderer.setAnimationLoop(this.animate.bind(this));
   }
 
   private animate(): void {
-    requestAnimationFrame(this.animate.bind(this));
-
     if (!this.isInitialized || !this.gameStarted) return;
 
     const deltaTime = this.clock.getDelta();
@@ -280,22 +279,31 @@ Have fun!
     // Update all systems
     this.systemManager.updateSystems(deltaTime);
 
-    // Update skybox position
-    this.systemManager.skybox.updatePosition(this.sandboxRenderer.camera.position);
+    // Get the appropriate camera for VR or desktop mode
+    const activeCamera = this.sandboxRenderer.isVRPresenting()
+      ? this.sandboxRenderer.getVRCamera()
+      : this.sandboxRenderer.camera;
+
+    // Update skybox position (use VR camera position if in VR)
+    this.systemManager.skybox.updatePosition(activeCamera.position);
+
+    // Update UI for VR mode (hide crosshair in VR)
+    this.sandboxRenderer.updateUIForVR();
 
     // Render the main scene with post-processing
-    if (this.sandboxRenderer.postProcessing) {
+    if (this.sandboxRenderer.postProcessing && !this.sandboxRenderer.isVRPresenting()) {
+      // Disable post-processing in VR for performance
       this.sandboxRenderer.postProcessing.render(deltaTime);
     } else {
-      // Fallback to regular rendering if post-processing is disabled
+      // Direct rendering for VR or post-processing fallback
       this.sandboxRenderer.renderer.render(
         this.sandboxRenderer.scene,
-        this.sandboxRenderer.camera
+        activeCamera
       );
     }
 
-    // Render weapon overlay (after post-processing)
-    if (this.systemManager.firstPersonWeapon) {
+    // Render weapon overlay (only in desktop mode, VR uses 3D weapons)
+    if (this.systemManager.firstPersonWeapon && !this.sandboxRenderer.isVRPresenting()) {
       this.systemManager.firstPersonWeapon.renderWeapon(this.sandboxRenderer.renderer);
     }
   }

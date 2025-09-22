@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PixelPerfectUtils } from '../utils/PixelPerfect';
 import { PostProcessingManager } from '../systems/effects/PostProcessingManager';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
 
 export class SandboxRenderer {
   public renderer: THREE.WebGLRenderer;
@@ -10,6 +11,7 @@ export class SandboxRenderer {
 
   private spawnLoadingDiv?: HTMLDivElement;
   private crosshair?: HTMLDivElement;
+  private vrButton?: HTMLElement;
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -28,6 +30,7 @@ export class SandboxRenderer {
     this.setupRenderer();
     this.setupLighting();
     this.setupPostProcessing();
+    this.setupVR();
   }
 
   private setupRenderer(): void {
@@ -101,8 +104,33 @@ export class SandboxRenderer {
     );
   }
 
+  private setupVR(): void {
+    // Enable WebXR VR support
+    this.renderer.xr.enabled = true;
+
+    // Set reference space to local-floor for room-scale VR
+    this.renderer.xr.setReferenceSpaceType('local-floor');
+
+    // Create VR button and add to document
+    this.vrButton = VRButton.createButton(this.renderer);
+    this.vrButton.style.position = 'fixed';
+    this.vrButton.style.bottom = '20px';
+    this.vrButton.style.right = '20px';
+    this.vrButton.style.zIndex = '10004'; // Above other UI elements
+
+    console.log('🥽 WebXR VR support enabled');
+  }
+
   showRenderer(): void {
     this.renderer.domElement.style.display = 'block';
+    // Show VR button when renderer is shown
+    this.showVRButton();
+  }
+
+  showVRButton(): void {
+    if (this.vrButton && !this.vrButton.parentElement) {
+      document.body.appendChild(this.vrButton);
+    }
   }
 
   hideRenderer(): void {
@@ -375,6 +403,28 @@ export class SandboxRenderer {
     };
   }
 
+  // VR-specific methods
+  isVRPresenting(): boolean {
+    return this.renderer.xr.isPresenting;
+  }
+
+  getVRCamera(): THREE.Camera {
+    // In VR mode, use the XR camera; otherwise use the regular camera
+    if (this.isVRPresenting()) {
+      return this.renderer.xr.getCamera();
+    }
+    return this.camera;
+  }
+
+  // Hide crosshair in VR mode (natural controller pointing)
+  updateUIForVR(): void {
+    if (this.isVRPresenting()) {
+      this.hideCrosshair();
+    } else {
+      this.showCrosshairAgain();
+    }
+  }
+
   dispose(): void {
     // Clean up spawn loading indicator
     if (this.spawnLoadingDiv && this.spawnLoadingDiv.parentElement) {
@@ -384,6 +434,11 @@ export class SandboxRenderer {
     // Clean up crosshair
     if (this.crosshair && this.crosshair.parentElement) {
       this.crosshair.parentElement.removeChild(this.crosshair);
+    }
+
+    // Clean up VR button
+    if (this.vrButton && this.vrButton.parentElement) {
+      this.vrButton.parentElement.removeChild(this.vrButton);
     }
 
     // Clean up Three.js resources
