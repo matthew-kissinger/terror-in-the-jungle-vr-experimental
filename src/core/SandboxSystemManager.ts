@@ -276,34 +276,68 @@ export class SandboxSystemManager {
   }
 
   async preGenerateSpawnArea(spawnPos: THREE.Vector3): Promise<void> {
-    console.log(`Pre-generating spawn areas for both factions...`);
+    console.log(`Pre-generating spawn areas for game mode...`);
 
-    if (this.chunkManager) {
-      // Generate US base chunks
-      const usBasePos = new THREE.Vector3(0, 0, -50);
-      console.log('🇺🇸 Generating US base chunks...');
-      this.chunkManager.updatePlayerPosition(usBasePos);
-      this.chunkManager.update(0.01);
-      await new Promise(resolve => setTimeout(resolve, 100));
+    if (this.chunkManager && this.gameModeManager) {
+      const currentConfig = this.gameModeManager.getCurrentConfig();
+      const isOpenFrontier = currentConfig.id === 'open_frontier';
 
-      // Generate OPFOR base chunks
-      const opforBasePos = new THREE.Vector3(0, 0, 145);
-      console.log('🚩 Generating OPFOR base chunks...');
-      this.chunkManager.updatePlayerPosition(opforBasePos);
-      this.chunkManager.update(0.01);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (isOpenFrontier) {
+        // Open Frontier: Generate chunks for far spawn points
+        console.log('🌍 Open Frontier mode - generating extended terrain...');
 
-      // Generate middle battlefield chunks
-      const centerPos = new THREE.Vector3(0, 0, 50);
-      console.log('⚔️ Generating battlefield chunks...');
-      this.chunkManager.updatePlayerPosition(centerPos);
-      this.chunkManager.update(0.01);
-      await new Promise(resolve => setTimeout(resolve, 100));
+        // Generate US Main HQ area at -1400
+        const usMainHQ = new THREE.Vector3(0, 0, -1400);
+        console.log('🇺🇸 Generating US Main HQ chunks at z=-1400...');
+        this.chunkManager.updatePlayerPosition(usMainHQ);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Return to player spawn position
+        // Generate OPFOR Main HQ area at +1400
+        const opforMainHQ = new THREE.Vector3(0, 0, 1400);
+        console.log('🚩 Generating OPFOR Main HQ chunks at z=+1400...');
+        this.chunkManager.updatePlayerPosition(opforMainHQ);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Generate some intermediate zones
+        const middleZone = new THREE.Vector3(0, 0, 0);
+        console.log('⚔️ Generating central battlefield chunks...');
+        this.chunkManager.updatePlayerPosition(middleZone);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+      } else {
+        // Zone Control: Generate chunks for close spawn points
+        console.log('🏁 Zone Control mode - generating standard terrain...');
+
+        // Generate US base chunks
+        const usBasePos = new THREE.Vector3(0, 0, -50);
+        console.log('🇺🇸 Generating US base chunks...');
+        this.chunkManager.updatePlayerPosition(usBasePos);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Generate OPFOR base chunks
+        const opforBasePos = new THREE.Vector3(0, 0, 145);
+        console.log('🚩 Generating OPFOR base chunks...');
+        this.chunkManager.updatePlayerPosition(opforBasePos);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Generate middle battlefield chunks
+        const centerPos = new THREE.Vector3(0, 0, 50);
+        console.log('⚔️ Generating battlefield chunks...');
+        this.chunkManager.updatePlayerPosition(centerPos);
+        this.chunkManager.update(0.01);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Return to player spawn position and ensure it's loaded
+      console.log(`📍 Ensuring spawn area is loaded at: ${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
       this.chunkManager.updatePlayerPosition(spawnPos);
       this.chunkManager.update(0.01);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Initialize zones after chunk generation
       console.log('🚩 Initializing zones after chunk generation...');

@@ -784,10 +784,19 @@ Escape - Release pointer lock / Exit helicopter
     );
 
     if (usMainHQ) {
-      // Spawn at main HQ with player height
+      // Spawn at main HQ with proper terrain height
       const spawnPos = usMainHQ.position.clone();
-      spawnPos.y = 5; // Player height
-      console.log(`🎯 Spawning at US main HQ: ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+
+      // Get actual terrain height at spawn position
+      if (this.chunkManager) {
+        const terrainHeight = this.chunkManager.getEffectiveHeightAt(spawnPos.x, spawnPos.z);
+        spawnPos.y = terrainHeight + 2; // Player height above terrain
+        console.log(`🎯 Spawning at US main HQ - Terrain height: ${terrainHeight.toFixed(1)}, Player at: ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+      } else {
+        spawnPos.y = 5; // Fallback if chunk manager not ready
+        console.log(`🎯 Spawning at US main HQ (no terrain data yet): ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+      }
+
       return spawnPos;
     }
 

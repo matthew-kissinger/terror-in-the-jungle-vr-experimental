@@ -324,9 +324,19 @@ export class ModernPlayerController implements GameSystem {
    * Get spawn position from game mode
    */
   private getSpawnPosition(): THREE.Vector3 {
-    // This would normally come from game mode manager
-    // For now, return a default position
-    return new THREE.Vector3(0, 5, -50);
+    // Get spawn from game mode or use default
+    let spawnPos = new THREE.Vector3(0, 5, -50);
+
+    // TODO: Get actual spawn from game mode manager when available
+    // For now, check terrain height at spawn position
+    if (this.chunkManager) {
+      const terrainHeight = this.chunkManager.getEffectiveHeightAt(spawnPos.x, spawnPos.z);
+      if (terrainHeight > -100) { // Valid terrain
+        spawnPos.y = terrainHeight + 2; // Player height above terrain
+      }
+    }
+
+    return spawnPos;
   }
 
   /**
