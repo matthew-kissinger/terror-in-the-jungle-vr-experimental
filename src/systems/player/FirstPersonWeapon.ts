@@ -451,6 +451,13 @@ export class FirstPersonWeapon implements GameSystem {
         const hitType = (result as any).killed ? 'kill' : (result as any).headshot ? 'headshot' : 'normal';
         this.hudSystem.showHitMarker(hitType);
       }
+
+      // Also show in VR HUD if active
+      const vrHUDSystem = (this as any).vrHUDSystem || (window as any).vrHUDSystem;
+      if (vrHUDSystem && (this.vrSystem?.isVRActive() || this.vrManager?.isVRActive())) {
+        const hitType = (result as any).killed ? 'kill' : (result as any).headshot ? 'headshot' : 'normal';
+        vrHUDSystem.showHitMarker(hitType);
+      }
     }
 
     // Spawn muzzle flash at the muzzle position
@@ -597,6 +604,10 @@ export class FirstPersonWeapon implements GameSystem {
 
   setVRSystem(vrSystem: VRSystem): void {
     this.vrSystem = vrSystem;
+  }
+
+  setVRHUDSystem(vrHUDSystem: any): void {
+    (this as any).vrHUDSystem = vrHUDSystem;
   }
 
   /**

@@ -15,7 +15,7 @@ export class CameraRig {
   private isInVR: boolean = false;
 
   // Movement parameters
-  private readonly PLAYER_HEIGHT = 1.6; // Eye height in meters
+  private readonly PLAYER_HEIGHT = 3.0; // Eye height in meters (3m for better VR perspective)
   private readonly COLLISION_RADIUS = 0.3;
 
   // Reference to terrain/chunk manager for height queries

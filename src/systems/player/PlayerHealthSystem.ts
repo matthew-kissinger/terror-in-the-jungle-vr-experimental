@@ -148,6 +148,15 @@ export class PlayerHealthSystem implements GameSystem {
     }
     this.effects.addDamageIndicator(amount, sourcePosition, playerPosition, cameraDirection);
 
+    // VR HUD damage indicator - make globally accessible
+    const vrHUDSystem = (window as any).vrHUDSystem || (this as any).vrHUDSystem;
+    if (vrHUDSystem && sourcePosition && playerPosition) {
+      const direction = new THREE.Vector3()
+        .subVectors(sourcePosition, playerPosition)
+        .normalize();
+      vrHUDSystem.showDamage(direction, amount);
+    }
+
     // Check for death
     if (this.playerState.health <= 0) {
       this.onPlayerDeath();

@@ -25,6 +25,7 @@ import { VRManager } from '../systems/vr/VRManager';
 import { CameraRig } from '../systems/camera/CameraRig';
 import { InputManager } from '../systems/input/InputManager';
 import { VRSystem } from '../systems/vr/VRSystem';
+import { VRHUDSystem } from '../systems/vr/VRHUDSystem';
 import { ModernPlayerController } from '../systems/player/ModernPlayerController';
 
 export class SandboxSystemManager {
@@ -57,6 +58,7 @@ export class SandboxSystemManager {
   public cameraRig!: CameraRig;
   public inputManager!: InputManager;
   public vrSystem!: VRSystem;
+  public vrHUDSystem?: VRHUDSystem;
   public modernPlayerController!: ModernPlayerController;
 
   async initializeSystems(
@@ -82,6 +84,17 @@ export class SandboxSystemManager {
 
       // Create VR system
       this.vrSystem = new VRSystem(scene, sandboxRenderer.renderer, this.cameraRig, this.inputManager);
+
+      // Create VR HUD system
+      this.vrHUDSystem = new VRHUDSystem({
+        scene,
+        camera,
+        leftController: this.vrSystem.getLeftController() || undefined,
+        rightController: this.vrSystem.getRightController() || undefined
+      });
+
+      // Make VR HUD globally accessible for damage/hit indicators
+      (window as any).vrHUDSystem = this.vrHUDSystem;
 
       // Keep old VR Manager for backward compatibility during transition
       this.vrManager = new VRManager(scene, camera, sandboxRenderer.renderer);
@@ -212,6 +225,10 @@ export class SandboxSystemManager {
     if (this.vrManager) {
       this.playerController.setVRManager(this.vrManager);
     }
+    // Connect CameraRig to PlayerController for VRSystem sync
+    if (this.cameraRig) {
+      this.playerController.setCameraRig(this.cameraRig);
+    }
     this.combatantSystem.setChunkManager(this.chunkManager);
     this.firstPersonWeapon.setPlayerController(this.playerController);
     this.firstPersonWeapon.setCombatantSystem(this.combatantSystem);
@@ -225,6 +242,10 @@ export class SandboxSystemManager {
     // Also connect new VR system to weapon
     if (this.vrSystem) {
       this.firstPersonWeapon.setVRSystem(this.vrSystem);
+    }
+    // Connect VR HUD system to weapon
+    if (this.vrHUDSystem) {
+      this.firstPersonWeapon.setVRHUDSystem(this.vrHUDSystem);
     }
     this.hudSystem.setCombatantSystem(this.combatantSystem);
     this.hudSystem.setZoneManager(this.zoneManager);
@@ -361,9 +382,47 @@ export class SandboxSystemManager {
       this.inputManager.update(deltaTime);
     }
 
+    // Update VR HUD System
+    if (this.vrHUDSystem && (this.vrSystem?.isVRActive() || this.vrManager?.isVRActive())) {
+      // Gather game state for HUD
+      const gameState = {
+        health: this.playerHealthSystem?.getHealth() || 100,
+        ammo: this.firstPersonWeapon?.getAmmoState()?.currentMagazine || 30,
+        maxAmmo: this.firstPersonWeapon?.getAmmoState()?.reserveAmmo || 90,
+        playerPosition: this.playerController?.getPosition(),
+        playerRotation: this.camera?.rotation,
+        zones: this.zoneManager?.getZones()
+      };
+
+      this.vrHUDSystem.update(gameState);
+
+      // Handle VR button inputs for HUD
+      this.handleVRHUDInput();
+    }
+
     // Update all GameSystem implementations
     for (const system of this.systems) {
       system.update(deltaTime);
+    }
+  }
+
+  private handleVRHUDInput(): void {
+    if (!this.vrHUDSystem || !this.vrManager) return;
+
+    // Check for button presses to toggle HUD elements
+    if (this.vrManager.isButtonPressed('xButton')) {
+      this.vrHUDSystem.handleControllerInput('xButton', 'left');
+    }
+    if (this.vrManager.isButtonPressed('yButton')) {
+      this.vrHUDSystem.handleControllerInput('yButton', 'left');
+    }
+
+    // Handle grip for wrist display
+    const inputs = this.vrManager.getControllerInputs();
+    if (inputs.leftGrip) {
+      this.vrHUDSystem.handleControllerInput('leftGrip', 'left');
+    } else {
+      this.vrHUDSystem.handleGripRelease('left');
     }
   }
 

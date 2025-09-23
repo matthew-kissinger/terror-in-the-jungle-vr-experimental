@@ -256,9 +256,15 @@ export class VRManager implements GameSystem {
             console.log(`🎮 Left stick: X=${leftX.toFixed(2)}, Z=${leftZ.toFixed(2)}`);
           }
 
-          // Left controller buttons (X and Y)
-          this.controllerInputs.xButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
-          this.controllerInputs.yButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+          // Left controller buttons (X and Y) - with crash protection
+          try {
+            this.controllerInputs.xButton = gamepad.buttons && gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+            this.controllerInputs.yButton = gamepad.buttons && gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+          } catch (e) {
+            console.warn('⚠️ VR: Error reading left controller buttons:', e);
+            this.controllerInputs.xButton = false;
+            this.controllerInputs.yButton = false;
+          }
         } else if (handedness === 'right') {
           // Right thumbstick for turning
           const rightX = gamepad.axes[2] || 0;
@@ -271,9 +277,15 @@ export class VRManager implements GameSystem {
             console.log(`🎮 Right stick: X=${rightX.toFixed(2)}, Y=${rightY.toFixed(2)}`);
           }
 
-          // Right controller buttons (A and B)
-          this.controllerInputs.aButton = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
-          this.controllerInputs.bButton = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+          // Right controller buttons (A and B) - with crash protection
+          try {
+            this.controllerInputs.aButton = gamepad.buttons && gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+            this.controllerInputs.bButton = gamepad.buttons && gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+          } catch (e) {
+            console.warn('⚠️ VR: Error reading right controller buttons:', e);
+            this.controllerInputs.aButton = false;
+            this.controllerInputs.bButton = false;
+          }
         }
       }
     }

@@ -16,6 +16,7 @@ export class PlayerController implements GameSystem {
   private hudSystem?: any;
   private sandboxRenderer?: any;
   private vrManager?: VRManager;
+  private cameraRig?: any; // CameraRig for VRSystem controller sync
   private vrSnapTurnCooldown = false;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
@@ -436,6 +437,12 @@ export class PlayerController implements GameSystem {
     // Update both the VR rig and the internal player state position
     this.vrManager.setVRPlayerPosition(vrPlayerPos);
     this.playerState.position.copy(vrPlayerPos);
+
+    // CRITICAL FIX: Also update CameraRig position to keep VRSystem controllers in sync
+    // This fixes the gun drift issue where VRSystem controllers weren't moving with player
+    if (this.cameraRig) {
+      this.cameraRig.setPosition(vrPlayerPos);
+    }
   }
 
   private updateHelicopterControls(deltaTime: number): void {
@@ -642,7 +649,12 @@ export class PlayerController implements GameSystem {
       // When in VR, move the XR player root instead of the head camera
       this.vrManager.setVRPlayerPosition(position.clone());
       // Keep the headset anchor at standard standing height inside the group
-      this.camera.position.set(0, 1.6, 0);
+      this.camera.position.set(0, 3.0, 0); // 3m height for better VR perspective
+
+      // CRITICAL FIX: Also update CameraRig to keep VRSystem controllers in sync
+      if (this.cameraRig) {
+        this.cameraRig.setPosition(position.clone());
+      }
     } else {
       this.camera.position.copy(position);
     }
@@ -747,6 +759,10 @@ Escape - Release pointer lock / Exit helicopter
 
   setVRManager(vrManager: VRManager): void {
     this.vrManager = vrManager;
+  }
+
+  setCameraRig(cameraRig: any): void {
+    this.cameraRig = cameraRig;
   }
 
   equipWeapon(): void {
