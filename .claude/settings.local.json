@@ -46,7 +46,8 @@
       "Bash(fi)",
       "Bash(done)",
       "Bash(gh workflow run:*)",
-      "Bash(gh workflow:*)"
+      "Bash(gh workflow:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

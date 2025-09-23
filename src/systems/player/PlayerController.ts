@@ -17,7 +17,6 @@ export class PlayerController implements GameSystem {
   private sandboxRenderer?: any;
   private vrSystem?: VRSystem;
   private cameraRig?: any; // CameraRig for VRSystem controller sync
-  private vrSnapTurnCooldown = false;
   private playerState: PlayerState;
   private keys: Set<string> = new Set();
   private mouseMovement = { x: 0, y: 0 };
@@ -393,21 +392,14 @@ export class PlayerController implements GameSystem {
       this.playerState.isGrounded = false;
     }
 
-    // Handle right thumbstick for rotation (snap turn)
-    if (Math.abs(inputs.rightThumbstickX) > 0.7) {
-      // Snap turn - rotate by 30 degrees when thumbstick moves significantly
-      const turnAmount = inputs.rightThumbstickX > 0 ? Math.PI / 6 : -Math.PI / 6; // 30 degrees
-
-      // Only snap turn once per stick movement (prevent multiple snaps)
-      if (!this.vrSnapTurnCooldown) {
-        this.yaw += turnAmount;
-        this.vrSnapTurnCooldown = true;
-
-        // Cooldown to prevent rapid snapping
-        setTimeout(() => {
-          this.vrSnapTurnCooldown = false;
-        }, 300);
-      }
+    // Handle right thumbstick for smooth turning
+    // Apply deadzone and smooth turning
+    if (Math.abs(inputs.rightThumbstickX) > 0.1) {
+      // Smooth turn with reduced sensitivity and correct inversion
+      // Negative to invert the direction (push right = turn right)
+      const turnSpeed = 1.5; // Radians per second (reduced from typical 2-3)
+      const turnAmount = -inputs.rightThumbstickX * turnSpeed * deltaTime;
+      this.yaw += turnAmount;
     }
 
     // Apply gravity to the player's state velocity, not directly to the rig
