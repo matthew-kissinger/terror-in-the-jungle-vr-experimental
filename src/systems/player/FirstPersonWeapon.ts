@@ -538,13 +538,21 @@ export class FirstPersonWeapon implements GameSystem {
     const shootDirection = this.vrSystem.getRightControllerDirection();
     const rightController = this.vrSystem.getRightController();
 
-    // Get controller position for bullet spawn
+    // Get muzzle position for bullet spawn and effects
     const bulletStart = new THREE.Vector3();
-    if (rightController) {
+    let muzzleWorldPos = new THREE.Vector3();
+
+    // If we have the VR weapon with muzzle, use its world position
+    if (this.vrMuzzleRef && rightController) {
+      this.vrMuzzleRef.getWorldPosition(muzzleWorldPos);
+      bulletStart.copy(muzzleWorldPos);
+    } else if (rightController) {
+      // Fallback to controller position
       rightController.getWorldPosition(bulletStart);
+      muzzleWorldPos.copy(bulletStart);
     }
 
-    // Create ray for hitscan
+    // Create ray for hitscan from muzzle position
     const ray = new THREE.Ray(bulletStart, shootDirection || new THREE.Vector3(0, 0, -1));
 
     // Apply spread
@@ -569,9 +577,9 @@ export class FirstPersonWeapon implements GameSystem {
       }
     }
 
-    // Spawn muzzle flash at controller position
+    // Spawn muzzle flash at actual muzzle position
     if (shootDirection) {
-      this.muzzleFlashPool.spawn(bulletStart, shootDirection, 1.2);
+      this.muzzleFlashPool.spawn(muzzleWorldPos, shootDirection, 1.2);
     }
 
     // Apply haptic feedback to controller
@@ -702,10 +710,11 @@ export class FirstPersonWeapon implements GameSystem {
     // Scale weapon for VR hand size (slightly smaller than desktop overlay)
     this.vr3DWeapon.scale.set(0.6, 0.6, 0.6);
 
-    // Position weapon at the stock for proper holding (move attachment point back)
-    this.vr3DWeapon.position.set(0.05, -0.05, 0.2); // Back towards stock, slightly right
-    // Rotate 45 degrees to the left so barrel points forward properly
-    this.vr3DWeapon.rotation.set(0, -Math.PI / 4, 0); // -45 degrees Y rotation
+    // Position weapon at the grip/stock area for natural holding
+    // The gun's stock is at negative X, so we move it back along X
+    this.vr3DWeapon.position.set(0.6, -0.05, -0.05); // Move stock to controller position
+    // Rotate 90 degrees around Y to align barrel (+X axis) with controller forward (-Z axis)
+    this.vr3DWeapon.rotation.set(0, Math.PI / 2, 0); // +90 degrees Y rotation
 
     // Get muzzle reference for VR aiming
     this.vrMuzzleRef = this.vr3DWeapon.getObjectByName('muzzle');
@@ -719,20 +728,27 @@ export class FirstPersonWeapon implements GameSystem {
   private createVRAimingSystem(): void {
     if (!this.vr3DWeapon || !this.vrMuzzleRef) return;
 
-    // Create laser sight - thin red line
+    // Create laser sight - red line from muzzle forward
     const laserGeometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -10) // 10 meters forward
+      new THREE.Vector3(50, 0, 0) // 50 meters along gun barrel (X axis)
     ]);
     const laserMaterial = new THREE.LineBasicMaterial({
       color: 0xff0000,
-      opacity: 0.6,
-      transparent: true
+      opacity: 0.8,
+      transparent: true,
+      linewidth: 2
     });
     this.vrAimingLaser = new THREE.Line(laserGeometry, laserMaterial);
-    this.vrAimingLaser.visible = false; // Hidden by default
+    this.vrAimingLaser.visible = true; // Always visible for aiming
 
-    // Add laser to the weapon (it will follow the muzzle)
+    // Position laser at the muzzle location
+    if (this.vrMuzzleRef) {
+      // Muzzle is at (1.7, 0, 0) in gun coordinates
+      this.vrAimingLaser.position.set(1.7, 0, 0);
+    }
+
+    // Add laser to the weapon (it will follow the gun)
     this.vr3DWeapon.add(this.vrAimingLaser);
 
     // Create 3D crosshair - small glowing sphere

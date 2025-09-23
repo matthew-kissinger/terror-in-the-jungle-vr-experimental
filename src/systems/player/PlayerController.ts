@@ -395,10 +395,10 @@ export class PlayerController implements GameSystem {
     // Handle right thumbstick for smooth turning
     // Apply deadzone and smooth turning
     if (Math.abs(inputs.rightThumbstickX) > 0.1) {
-      // Smooth turn with reduced sensitivity and correct inversion
-      // Negative to invert the direction (push right = turn right)
+      // Smooth turn with reduced sensitivity
+      // Positive value - push right = turn right, push left = turn left
       const turnSpeed = 1.5; // Radians per second (reduced from typical 2-3)
-      const turnAmount = -inputs.rightThumbstickX * turnSpeed * deltaTime;
+      const turnAmount = inputs.rightThumbstickX * turnSpeed * deltaTime;
       this.yaw += turnAmount;
     }
 
