@@ -712,7 +712,8 @@ export class FirstPersonWeapon implements GameSystem {
 
     // Position weapon at the grip/stock area for natural holding
     // The gun's stock is at negative X, so we move it back along X
-    this.vr3DWeapon.position.set(0.6, -0.05, -0.05); // Move stock to controller position
+    // Move left (negative X in local space) to center the gun better
+    this.vr3DWeapon.position.set(0.6, -0.05, -0.15); // Move stock to controller, shifted left toward center
     // Rotate 90 degrees around Y to align barrel (+X axis) with controller forward (-Z axis)
     this.vr3DWeapon.rotation.set(0, Math.PI / 2, 0); // +90 degrees Y rotation
 

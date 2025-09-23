@@ -327,15 +327,22 @@ class WristDisplay {
     this.healthBar.position.set(0, 0.015, 0.001);
     this.group.add(this.healthBar);
 
-    // Ammo counter
-    this.ammoText = new Text();
-    this.ammoText.text = '30/90';
-    this.ammoText.fontSize = 0.01;
-    this.ammoText.color = 0xffffff;
-    this.ammoText.anchorX = 'center';
-    this.ammoText.anchorY = 'middle';
-    this.ammoText.position.set(0, 0, 0.002);
-    this.group.add(this.ammoText);
+    // Ammo counter - using Text from troika-three-text
+    try {
+      this.ammoText = new Text();
+      this.ammoText.text = '30/90';
+      this.ammoText.fontSize = 0.01;
+      this.ammoText.color = 0xffffff;
+      this.ammoText.anchorX = 'center';
+      this.ammoText.anchorY = 'middle';
+      this.ammoText.position.set(0, 0, 0.002);
+      // IMPORTANT: Must call sync() for Text to be rendered
+      this.ammoText.sync();
+      this.group.add(this.ammoText);
+    } catch (e) {
+      console.warn('⚠️ VR: Could not create wrist display text:', e);
+      // Create fallback without text if Text fails
+    }
 
     // Compass needle
     const compassGeometry = new THREE.ConeGeometry(0.005, 0.02, 3);
@@ -422,8 +429,8 @@ class MinimapPanel {
     title.color = 0x00ffff;
     title.anchorX = 'center';
     title.position.set(0, 0.18, 0.002);
+    title.sync(); // Must sync for text to render
     this.group.add(title);
-    title.sync();
   }
 
   setVisible(visible: boolean): void {
@@ -483,8 +490,8 @@ class FullMapPanel {
     title.color = 0x00ffff;
     title.anchorX = 'center';
     title.position.set(0, 0.36, 0.002);
+    title.sync(); // Must sync for text to render
     this.group.add(title);
-    title.sync();
 
     // Instructions
     const instructions = new Text();
@@ -493,8 +500,8 @@ class FullMapPanel {
     instructions.color = 0xaaaaaa;
     instructions.anchorX = 'center';
     instructions.position.set(0, -0.36, 0.002);
+    instructions.sync(); // Must sync for text to render
     this.group.add(instructions);
-    instructions.sync();
   }
 
   setVisible(visible: boolean): void {
