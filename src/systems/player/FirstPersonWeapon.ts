@@ -12,7 +12,6 @@ import { PlayerController } from './PlayerController';
 import { AudioManager } from '../audio/AudioManager';
 import { AmmoManager } from '../weapons/AmmoManager';
 import { ZoneManager } from '../world/ZoneManager';
-import { VRManager } from '../vr/VRManager';
 import { VRSystem } from '../vr/VRSystem';
 
 export class FirstPersonWeapon implements GameSystem {
@@ -73,7 +72,7 @@ export class FirstPersonWeapon implements GameSystem {
   private audioManager?: AudioManager;
   private ammoManager: AmmoManager;
   private zoneManager?: ZoneManager;
-  private vrManager?: VRManager;
+  // VRManager removed - using VRSystem instead
   private vrSystem?: VRSystem;
 
   // Reload animation state
@@ -142,7 +141,7 @@ export class FirstPersonWeapon implements GameSystem {
     console.log('✅ First Person Weapon initialized (programmatic rifle)');
 
     // Create VR weapon if VR Manager is available
-    if (this.vrManager) {
+    if (this.vrSystem) {
       this.createVRWeapon();
     }
 
@@ -209,14 +208,14 @@ export class FirstPersonWeapon implements GameSystem {
     this.gunCore.cooldown(deltaTime);
 
     // Handle VR controller firing
-    const isVRActive = this.vrSystem?.isVRActive() || this.vrManager?.isVRActive();
+    const isVRActive = this.vrSystem?.isVRActive() || this.vrSystem?.isVRActive();
     if (isVRActive) {
       // Attach weapon to VR controller if not already attached
       if (!this.vrWeaponAttached) {
         this.attachVRWeapon();
       }
 
-      const inputs = this.vrManager?.getControllerInputs() || { rightTrigger: 0 };
+      const inputs = this.vrSystem?.getControllerInputs() || { rightTrigger: 0 };
       if (inputs.rightTrigger > 0 && !this.isReloadAnimating) {
         this.tryFireVR();
       }
@@ -227,7 +226,7 @@ export class FirstPersonWeapon implements GameSystem {
       }
 
       // Handle VR B button for reload
-      if (this.vrManager?.isButtonPressed('bButton') && !this.isReloadAnimating) {
+      if (this.vrSystem?.isButtonPressed('bButton') && !this.isReloadAnimating) {
         this.startReload();
       }
     } else {
@@ -382,7 +381,7 @@ export class FirstPersonWeapon implements GameSystem {
     if (!this.weaponRig) return;
 
     // Don't render 2D weapon overlay in VR mode
-    if (this.vrManager?.isVRActive()) return;
+    if (this.vrSystem?.isVRActive()) return;
     
     // Save current renderer state
     const currentAutoClear = renderer.autoClear;
@@ -454,7 +453,7 @@ export class FirstPersonWeapon implements GameSystem {
 
       // Also show in VR HUD if active
       const vrHUDSystem = (this as any).vrHUDSystem || (window as any).vrHUDSystem;
-      if (vrHUDSystem && (this.vrSystem?.isVRActive() || this.vrManager?.isVRActive())) {
+      if (vrHUDSystem && (this.vrSystem?.isVRActive() || this.vrSystem?.isVRActive())) {
         const hitType = (result as any).killed ? 'kill' : (result as any).headshot ? 'headshot' : 'normal';
         vrHUDSystem.showHitMarker(hitType);
       }
@@ -479,7 +478,7 @@ export class FirstPersonWeapon implements GameSystem {
     this.muzzleFlashPool.spawn(muzzlePos, forward, 1.2);
 
     // Check if we're in VR or desktop mode
-    const isVRActive = this.vrSystem?.isVRActive() || this.vrManager?.isVRActive();
+    const isVRActive = this.vrSystem?.isVRActive() || this.vrSystem?.isVRActive();
 
     if (!isVRActive) {
       // DESKTOP: Apply visual recoil to camera and weapon
@@ -511,7 +510,7 @@ export class FirstPersonWeapon implements GameSystem {
   }
 
   private tryFireVR(): void {
-    if (!this.combatantSystem || !this.gunCore.canFire() || !this.isEnabled || !this.vrManager) return;
+    if (!this.combatantSystem || !this.gunCore.canFire() || !this.isEnabled || !this.vrSystem) return;
 
     // Check ammo
     if (!this.ammoManager.canFire()) {
@@ -536,8 +535,8 @@ export class FirstPersonWeapon implements GameSystem {
     }
 
     // Get shooting direction from right controller
-    const shootDirection = this.vrManager.getRightControllerDirection();
-    const rightController = this.vrManager.getRightController();
+    const shootDirection = this.vrSystem.getRightControllerDirection();
+    const rightController = this.vrSystem.getRightController();
 
     // Get controller position for bullet spawn
     const bulletStart = new THREE.Vector3();
@@ -598,12 +597,36 @@ export class FirstPersonWeapon implements GameSystem {
     this.ammoManager.setZoneManager(zoneManager);
   }
 
-  setVRManager(vrManager: VRManager): void {
-    this.vrManager = vrManager;
-  }
+  // VRManager setter removed - use setVRSystem instead
 
   setVRSystem(vrSystem: VRSystem): void {
     this.vrSystem = vrSystem;
+  }
+
+  // Public methods for VRSystem to call during session management
+  public attachToVR(rightController: THREE.Group): void {
+    if (!rightController) return;
+
+    // Create VR weapon if needed
+    if (!this.vr3DWeapon) {
+      this.createVRWeapon();
+    }
+
+    // Attach directly to the provided controller
+    if (this.vr3DWeapon && !this.vrWeaponAttached) {
+      rightController.add(this.vr3DWeapon);
+      this.vrWeaponAttached = true;
+
+      // Show VR aiming system
+      if (this.vrAimingLaser) this.vrAimingLaser.visible = true;
+      if (this.vrCrosshair) this.vrCrosshair.visible = true;
+
+      console.log('🔫 VR weapon attached via VRSystem');
+    }
+  }
+
+  public detachFromVR(): void {
+    this.detachVRWeapon();
   }
 
   setVRHUDSystem(vrHUDSystem: any): void {
@@ -616,12 +639,12 @@ export class FirstPersonWeapon implements GameSystem {
    */
   private applyVRHapticRecoil(): void {
     // Get the right controller (shooting hand)
-    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    const rightController = this.vrSystem?.getRightController() || this.vrSystem?.getRightController();
     if (!rightController) return;
 
     // Try to get gamepad from controller's XR input source
     const xrSession = (this.vrSystem as any)?.renderer?.xr?.getSession() ||
-                      (this.vrManager as any)?.vrSession;
+                      (this.vrSystem as any)?.vrSession;
 
     if (xrSession && xrSession.inputSources) {
       for (const source of xrSession.inputSources) {
@@ -666,7 +689,8 @@ export class FirstPersonWeapon implements GameSystem {
 
 
   private createVRWeapon(): void {
-    if (!this.vrManager) return;
+    // Check if VR system is available
+    if (!this.vrSystem) return;
 
     // Create 3D weapon for VR using the same factory as desktop
     this.vr3DWeapon = ProgrammaticGunFactory.createRifle();
@@ -674,10 +698,10 @@ export class FirstPersonWeapon implements GameSystem {
     // Scale weapon for VR hand size (slightly smaller than desktop overlay)
     this.vr3DWeapon.scale.set(0.6, 0.6, 0.6);
 
-    // Position weapon in hand (adjust for natural grip)
-    this.vr3DWeapon.position.set(0, -0.05, -0.1); // Slightly forward and down from grip
-    // Fix rotation so barrel points forward (no 90 degree offset)
-    this.vr3DWeapon.rotation.set(0, 0, 0); // Barrel points straight ahead
+    // Position weapon at the stock for proper holding (move attachment point back)
+    this.vr3DWeapon.position.set(0.05, -0.05, 0.2); // Back towards stock, slightly right
+    // Rotate 45 degrees to the left so barrel points forward properly
+    this.vr3DWeapon.rotation.set(0, -Math.PI / 4, 0); // -45 degrees Y rotation
 
     // Get muzzle reference for VR aiming
     this.vrMuzzleRef = this.vr3DWeapon.getObjectByName('muzzle');
@@ -726,7 +750,7 @@ export class FirstPersonWeapon implements GameSystem {
     if (this.vrWeaponAttached) return;
 
     // Get right controller from either VRSystem (new) or VRManager (old)
-    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    const rightController = this.vrSystem?.getRightController() || this.vrSystem?.getRightController();
     if (!rightController) return;
 
     // Create VR 3D weapon if it doesn't exist yet
@@ -756,7 +780,7 @@ export class FirstPersonWeapon implements GameSystem {
   public detachVRWeapon(): void {
     if (!this.vrWeaponAttached || !this.vr3DWeapon) return;
 
-    const rightController = this.vrSystem?.getRightController() || this.vrManager?.getRightController();
+    const rightController = this.vrSystem?.getRightController() || this.vrSystem?.getRightController();
     if (rightController) {
       rightController.remove(this.vr3DWeapon);
       this.vrWeaponAttached = false;

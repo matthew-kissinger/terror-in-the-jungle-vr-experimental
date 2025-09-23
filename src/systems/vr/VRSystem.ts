@@ -8,6 +8,29 @@ import { GameSystem } from '../../types';
  * Modern VR System implementation using proper WebXR patterns
  * Handles VR session management, controllers, and locomotion
  */
+// Controller input state matching VRManager interface
+export interface ControllerInputs {
+  // Movement
+  leftThumbstickX: number;
+  leftThumbstickZ: number;
+  rightThumbstickX: number;
+  rightThumbstickY: number;
+
+  // Triggers (analog 0-1)
+  leftTrigger: number;
+  rightTrigger: number;
+
+  // Grips (boolean)
+  leftGrip: boolean;
+  rightGrip: boolean;
+
+  // Buttons (boolean)
+  aButton: boolean;
+  bButton: boolean;
+  xButton: boolean;
+  yButton: boolean;
+}
+
 export class VRSystem implements GameSystem {
   // Core references
   private scene: THREE.Scene;
@@ -38,6 +61,31 @@ export class VRSystem implements GameSystem {
   private snapTurnAngle = Math.PI / 6; // 30 degrees
   private teleportEnabled = true;
   private smoothLocomotion = true;
+
+  // Input state management (from VRManager)
+  private controllerInputs: ControllerInputs = {
+    leftThumbstickX: 0,
+    leftThumbstickZ: 0,
+    rightThumbstickX: 0,
+    rightThumbstickY: 0,
+    leftTrigger: 0,
+    rightTrigger: 0,
+    leftGrip: false,
+    rightGrip: false,
+    aButton: false,
+    bButton: false,
+    xButton: false,
+    yButton: false
+  };
+
+  // Button press detection with cooldown
+  private buttonCooldowns: Map<string, number> = new Map();
+  private readonly BUTTON_COOLDOWN = 500; // ms
+  private readonly THUMBSTICK_DEADZONE = 0.2;
+
+  // Game system references (from VRManager)
+  private firstPersonWeapon?: any;
+  private playerController?: any;
 
   constructor(
     scene: THREE.Scene,
@@ -173,6 +221,20 @@ export class VRSystem implements GameSystem {
       // Apply initial offset based on current player position
       this.updateReferenceSpaceOffset();
 
+      // Attach weapon to VR controller (from VRManager)
+      if (this.firstPersonWeapon) {
+        const rightController = this.getRightController();
+        if (rightController) {
+          this.firstPersonWeapon.attachToVR(rightController);
+        }
+      }
+
+      // Sync position with PlayerController (from VRManager)
+      if (this.playerController) {
+        const playerPos = this.playerController.getPlayerPosition();
+        this.setVRPlayerPosition(new THREE.Vector3(playerPos.x, 0, playerPos.z));
+      }
+
     } catch (error) {
       console.error('Failed to get reference space:', error);
     }
@@ -184,6 +246,11 @@ export class VRSystem implements GameSystem {
   private onSessionEnd(): void {
     console.log('🥽 VR session ended');
 
+    // Detach weapon from VR (from VRManager)
+    if (this.firstPersonWeapon) {
+      this.firstPersonWeapon.detachFromVR();
+    }
+
     this.xrSession = null;
     this.xrReferenceSpace = null;
     this.baseReferenceSpace = null;
@@ -194,6 +261,12 @@ export class VRSystem implements GameSystem {
     // Hide teleport marker
     if (this.teleportMarker) {
       this.teleportMarker.visible = false;
+    }
+
+    // Sync position back to PlayerController (from VRManager)
+    if (this.playerController) {
+      const vrPos = this.getVRPlayerPosition();
+      this.playerController.setPlayerPosition(vrPos);
     }
   }
 
@@ -401,6 +474,135 @@ export class VRSystem implements GameSystem {
   }
 
   /**
+   * Update controller input states from gamepads
+   */
+  private updateControllerInputs(): void {
+    // Reset inputs
+    this.controllerInputs = {
+      leftThumbstickX: 0,
+      leftThumbstickZ: 0,
+      rightThumbstickX: 0,
+      rightThumbstickY: 0,
+      leftTrigger: 0,
+      rightTrigger: 0,
+      leftGrip: false,
+      rightGrip: false,
+      aButton: false,
+      bButton: false,
+      xButton: false,
+      yButton: false
+    };
+
+    // Update from each controller
+    for (const controller of this.controllers) {
+      const gamepad = controller.userData.gamepad;
+      if (!gamepad) continue;
+
+      const isLeft = controller.userData.handedness === 'left';
+      const isRight = controller.userData.handedness === 'right';
+
+      try {
+        if (isLeft) {
+          // Left thumbstick (axes 2,3 on Quest controllers)
+          if (gamepad.axes && gamepad.axes.length >= 4) {
+            const x = gamepad.axes[2] || 0;
+            const z = gamepad.axes[3] || 0;
+            // Apply deadzone
+            this.controllerInputs.leftThumbstickX = Math.abs(x) > this.THUMBSTICK_DEADZONE ? x : 0;
+            this.controllerInputs.leftThumbstickZ = Math.abs(z) > this.THUMBSTICK_DEADZONE ? z : 0;
+          }
+
+          // Left trigger (button 0)
+          if (gamepad.buttons && gamepad.buttons[0]) {
+            this.controllerInputs.leftTrigger = gamepad.buttons[0].value || 0;
+          }
+
+          // Left grip (button 1)
+          if (gamepad.buttons && gamepad.buttons[1]) {
+            this.controllerInputs.leftGrip = gamepad.buttons[1].pressed || false;
+          }
+
+          // X button (button 4)
+          if (gamepad.buttons && gamepad.buttons[4]) {
+            this.controllerInputs.xButton = gamepad.buttons[4].pressed || false;
+          }
+
+          // Y button (button 5)
+          if (gamepad.buttons && gamepad.buttons[5]) {
+            this.controllerInputs.yButton = gamepad.buttons[5].pressed || false;
+          }
+        }
+
+        if (isRight) {
+          // Right thumbstick (axes 2,3 on Quest controllers)
+          if (gamepad.axes && gamepad.axes.length >= 4) {
+            const x = gamepad.axes[2] || 0;
+            const y = gamepad.axes[3] || 0;
+            // Apply deadzone
+            this.controllerInputs.rightThumbstickX = Math.abs(x) > this.THUMBSTICK_DEADZONE ? x : 0;
+            this.controllerInputs.rightThumbstickY = Math.abs(y) > this.THUMBSTICK_DEADZONE ? y : 0;
+          }
+
+          // Right trigger (button 0)
+          if (gamepad.buttons && gamepad.buttons[0]) {
+            this.controllerInputs.rightTrigger = gamepad.buttons[0].value || 0;
+          }
+
+          // Right grip (button 1)
+          if (gamepad.buttons && gamepad.buttons[1]) {
+            this.controllerInputs.rightGrip = gamepad.buttons[1].pressed || false;
+          }
+
+          // A button (button 4)
+          if (gamepad.buttons && gamepad.buttons[4]) {
+            this.controllerInputs.aButton = gamepad.buttons[4].pressed || false;
+          }
+
+          // B button (button 5)
+          if (gamepad.buttons && gamepad.buttons[5]) {
+            this.controllerInputs.bButton = gamepad.buttons[5].pressed || false;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ VRSystem: Error reading controller buttons:', e);
+      }
+    }
+  }
+
+  /**
+   * Check if a button was pressed (with cooldown)
+   */
+  public isButtonPressed(button: string): boolean {
+    const now = Date.now();
+    const lastPress = this.buttonCooldowns.get(button) || 0;
+
+    // Check if cooldown has expired
+    if (now - lastPress < this.BUTTON_COOLDOWN) {
+      return false;
+    }
+
+    // Check button state
+    let isPressed = false;
+    switch (button) {
+      case 'aButton': isPressed = this.controllerInputs.aButton; break;
+      case 'bButton': isPressed = this.controllerInputs.bButton; break;
+      case 'xButton': isPressed = this.controllerInputs.xButton; break;
+      case 'yButton': isPressed = this.controllerInputs.yButton; break;
+      case 'leftGrip': isPressed = this.controllerInputs.leftGrip; break;
+      case 'rightGrip': isPressed = this.controllerInputs.rightGrip; break;
+      case 'leftTrigger': isPressed = this.controllerInputs.leftTrigger > 0.5; break;
+      case 'rightTrigger': isPressed = this.controllerInputs.rightTrigger > 0.5; break;
+    }
+
+    if (isPressed) {
+      this.buttonCooldowns.set(button, now);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * GameSystem interface
    */
   async init(): Promise<void> {
@@ -409,6 +611,9 @@ export class VRSystem implements GameSystem {
 
   update(deltaTime: number): void {
     if (!this.renderer.xr.isPresenting) return;
+
+    // Update controller inputs
+    this.updateControllerInputs();
 
     // Update teleportation visualization
     this.updateTeleportation();
@@ -470,5 +675,90 @@ export class VRSystem implements GameSystem {
 
   public setSmoothLocomotion(enabled: boolean): void {
     this.smoothLocomotion = enabled;
+  }
+
+  /**
+   * Get controller input state (from VRManager API)
+   */
+  public getControllerInputs(): ControllerInputs {
+    return this.controllerInputs;
+  }
+
+  /**
+   * Get right controller direction for aiming (from VRManager API)
+   */
+  public getRightControllerDirection(): THREE.Vector3 | null {
+    const controller = this.getRightController();
+    if (!controller) return null;
+
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(controller.quaternion);
+    return direction;
+  }
+
+  /**
+   * Get left controller direction (from VRManager API)
+   */
+  public getLeftControllerDirection(): THREE.Vector3 | null {
+    const controller = this.getLeftController();
+    if (!controller) return null;
+
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(controller.quaternion);
+    return direction;
+  }
+
+  /**
+   * Get head position in world space (from VRManager API)
+   */
+  public getHeadPosition(): THREE.Vector3 {
+    // Camera position in dolly space + dolly position in world
+    const headPos = this.cameraRig.camera.position.clone();
+    headPos.add(this.cameraRig.dolly.position);
+    return headPos;
+  }
+
+  /**
+   * Get head rotation (from VRManager API)
+   */
+  public getHeadRotation(): THREE.Quaternion {
+    return this.cameraRig.camera.quaternion.clone();
+  }
+
+  /**
+   * Move VR player in world space (from VRManager API)
+   */
+  public moveVRPlayer(movement: THREE.Vector3): void {
+    this.cameraRig.move(movement);
+    this.updateReferenceSpaceOffset();
+  }
+
+  /**
+   * Get VR player position (from VRManager API)
+   */
+  public getVRPlayerPosition(): THREE.Vector3 {
+    return this.cameraRig.dolly.position.clone();
+  }
+
+  /**
+   * Set VR player position (from VRManager API)
+   */
+  public setVRPlayerPosition(position: THREE.Vector3): void {
+    this.cameraRig.setPosition(position);
+    this.updateReferenceSpaceOffset();
+  }
+
+  /**
+   * Set first person weapon reference (from VRManager API)
+   */
+  public setFirstPersonWeapon(weapon: any): void {
+    this.firstPersonWeapon = weapon;
+  }
+
+  /**
+   * Set player controller reference (from VRManager API)
+   */
+  public setPlayerController(controller: any): void {
+    this.playerController = controller;
   }
 }

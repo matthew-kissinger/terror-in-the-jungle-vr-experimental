@@ -5,7 +5,7 @@ import { ImprovedChunkManager } from '../terrain/ImprovedChunkManager';
 import { GameModeManager } from '../world/GameModeManager';
 import { Faction } from '../combat/types';
 import { HelicopterControls } from '../helicopter/HelicopterPhysics';
-import { VRManager } from '../vr/VRManager';
+import { VRSystem } from '../vr/VRSystem';
 
 export class PlayerController implements GameSystem {
   private camera: THREE.PerspectiveCamera;
@@ -15,7 +15,7 @@ export class PlayerController implements GameSystem {
   private firstPersonWeapon?: any;
   private hudSystem?: any;
   private sandboxRenderer?: any;
-  private vrManager?: VRManager;
+  private vrSystem?: VRSystem;
   private cameraRig?: any; // CameraRig for VRSystem controller sync
   private vrSnapTurnCooldown = false;
   private playerState: PlayerState;
@@ -85,7 +85,7 @@ export class PlayerController implements GameSystem {
     if (!this.isControlsEnabled) return; // Skip updates when dead
 
     // Check if we're in VR mode
-    const isVRActive = this.vrManager?.isVRActive() || false;
+    const isVRActive = this.vrSystem?.isVRActive() || false;
 
     if (this.playerState.isInHelicopter) {
       this.updateHelicopterControls(deltaTime);
@@ -324,7 +324,7 @@ export class PlayerController implements GameSystem {
     let groundHeight = 2; // Default player height above ground (flat world fallback)
     if (this.chunkManager) {
       // Use the position of the VR rig for ground checks if in VR
-      const checkPos = this.vrManager?.isVRActive() ? this.vrManager.getVRPlayerPosition() : newPosition;
+      const checkPos = this.vrSystem?.isVRActive() ? this.vrSystem.getVRPlayerPosition() : newPosition;
       const effectiveHeight = this.chunkManager.getEffectiveHeightAt(checkPos.x, checkPos.z);
       groundHeight = effectiveHeight + 2;
     }
@@ -344,21 +344,21 @@ export class PlayerController implements GameSystem {
   }
 
   private updateVRMovement(deltaTime: number): void {
-    if (!this.vrManager) {
+    if (!this.vrSystem) {
       console.warn('⚠️ updateVRMovement called but vrManager is null');
       return;
     }
 
     // Get VR controller inputs
-    const inputs = this.vrManager.getControllerInputs();
+    const inputs = this.vrSystem.getControllerInputs();
 
     // Use left thumbstick for movement
-    const moveX = inputs.leftThumbstick.x;
-    const moveZ = inputs.leftThumbstick.z;
+    const moveX = inputs.leftThumbstickX;
+    const moveZ = inputs.leftThumbstickZ;
 
     if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
       // Get head direction for movement orientation
-      const headRotation = this.vrManager.getHeadRotation();
+      const headRotation = this.vrSystem.getHeadRotation();
       const headDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(headRotation);
       headDirection.y = 0; // Keep movement horizontal
       headDirection.normalize();
@@ -376,14 +376,14 @@ export class PlayerController implements GameSystem {
       movement.addScaledVector(headRight, moveX * vrMoveSpeed * deltaTime);
 
       // Apply movement to VR player group
-      this.vrManager.moveVRPlayer(movement);
+      this.vrSystem.moveVRPlayer(movement);
 
       // Update player state position to match VR position (for game logic)
-      this.playerState.position.copy(this.vrManager.getVRPlayerPosition());
+      this.playerState.position.copy(this.vrSystem.getVRPlayerPosition());
     }
 
     // Handle VR-specific actions (A button for jump, right grip as alternative)
-    const jumpPressed = (inputs.rightGrip || this.vrManager.isButtonPressed('aButton')) &&
+    const jumpPressed = (inputs.rightGrip || this.vrSystem.isButtonPressed('aButton')) &&
                        !this.playerState.isJumping && this.playerState.isGrounded;
 
     if (jumpPressed) {
@@ -394,9 +394,9 @@ export class PlayerController implements GameSystem {
     }
 
     // Handle right thumbstick for rotation (snap turn)
-    if (Math.abs(inputs.rightThumbstick.x) > 0.7) {
+    if (Math.abs(inputs.rightThumbstickX) > 0.7) {
       // Snap turn - rotate by 30 degrees when thumbstick moves significantly
-      const turnAmount = inputs.rightThumbstick.x > 0 ? Math.PI / 6 : -Math.PI / 6; // 30 degrees
+      const turnAmount = inputs.rightThumbstickX > 0 ? Math.PI / 6 : -Math.PI / 6; // 30 degrees
 
       // Only snap turn once per stick movement (prevent multiple snaps)
       if (!this.vrSnapTurnCooldown) {
@@ -413,7 +413,7 @@ export class PlayerController implements GameSystem {
     // Apply gravity to the player's state velocity, not directly to the rig
     this.playerState.velocity.y += this.playerState.gravity * deltaTime;
 
-    const vrPlayerPos = this.vrManager.getVRPlayerPosition();
+    const vrPlayerPos = this.vrSystem.getVRPlayerPosition();
 
     // Apply vertical velocity to the rig
     vrPlayerPos.y += this.playerState.velocity.y * deltaTime;
@@ -435,7 +435,7 @@ export class PlayerController implements GameSystem {
     }
 
     // Update both the VR rig and the internal player state position
-    this.vrManager.setVRPlayerPosition(vrPlayerPos);
+    this.vrSystem.setVRPlayerPosition(vrPlayerPos);
     this.playerState.position.copy(vrPlayerPos);
 
     // CRITICAL FIX: Also update CameraRig position to keep VRSystem controllers in sync
@@ -529,7 +529,7 @@ export class PlayerController implements GameSystem {
   }
 
   private updateCamera(): void {
-    if (this.vrManager?.isVRActive()) {
+    if (this.vrSystem?.isVRActive()) {
       // XR runtime drives the camera pose while in VR
       return;
     }
@@ -645,9 +645,9 @@ export class PlayerController implements GameSystem {
   setPosition(position: THREE.Vector3): void {
     this.playerState.position.copy(position);
 
-    if (this.vrManager?.isVRActive()) {
+    if (this.vrSystem?.isVRActive()) {
       // When in VR, move the XR player root instead of the head camera
-      this.vrManager.setVRPlayerPosition(position.clone());
+      this.vrSystem.setVRPlayerPosition(position.clone());
       // Keep the headset anchor at standard standing height inside the group
       this.camera.position.set(0, 3.0, 0); // 3m height for better VR perspective
 
@@ -757,8 +757,8 @@ Escape - Release pointer lock / Exit helicopter
     this.sandboxRenderer = sandboxRenderer;
   }
 
-  setVRManager(vrManager: VRManager): void {
-    this.vrManager = vrManager;
+  setVRSystem(vrSystem: VRSystem): void {
+    this.vrSystem = vrSystem;
   }
 
   setCameraRig(cameraRig: any): void {
