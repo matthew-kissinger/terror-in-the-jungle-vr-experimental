@@ -355,6 +355,9 @@ export class PlayerController implements GameSystem {
     const moveX = inputs.leftThumbstickX;
     const moveZ = inputs.leftThumbstickZ;
 
+    // Sprint with Left Trigger (hold to run)
+    const isSprinting = inputs.leftTrigger > 0.5; // Trigger pressed more than halfway
+
     if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
       // Get head direction for movement orientation
       const headRotation = this.vrSystem.getHeadRotation();
@@ -367,8 +370,8 @@ export class PlayerController implements GameSystem {
       headRight.normalize();
 
       // Calculate movement vector in world space
-      const moveSpeed = this.playerState.isRunning ? this.playerState.runSpeed : this.playerState.speed;
-      const vrMoveSpeed = moveSpeed; // Use normal move speed (1:1 scale)
+      const baseSpeed = isSprinting ? this.playerState.runSpeed : this.playerState.speed;
+      const vrMoveSpeed = baseSpeed; // Use normal move speed (1:1 scale)
 
       const movement = new THREE.Vector3();
       movement.addScaledVector(headDirection, -moveZ * vrMoveSpeed * deltaTime);
