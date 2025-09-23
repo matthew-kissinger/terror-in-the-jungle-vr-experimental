@@ -540,10 +540,12 @@ export class FirstPersonWeapon implements GameSystem {
 
     // Get controller position for bullet spawn
     const bulletStart = new THREE.Vector3();
-    rightController.getWorldPosition(bulletStart);
+    if (rightController) {
+      rightController.getWorldPosition(bulletStart);
+    }
 
     // Create ray for hitscan
-    const ray = new THREE.Ray(bulletStart, shootDirection);
+    const ray = new THREE.Ray(bulletStart, shootDirection || new THREE.Vector3(0, 0, -1));
 
     // Apply spread
     const spread = this.gunCore.getSpreadDeg();
@@ -568,7 +570,9 @@ export class FirstPersonWeapon implements GameSystem {
     }
 
     // Spawn muzzle flash at controller position
-    this.muzzleFlashPool.spawn(bulletStart, shootDirection, 1.2);
+    if (shootDirection) {
+      this.muzzleFlashPool.spawn(bulletStart, shootDirection, 1.2);
+    }
 
     // Apply haptic feedback to controller
     if (rightController && rightController.userData.gamepad) {

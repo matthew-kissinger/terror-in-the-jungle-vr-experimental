@@ -707,6 +707,10 @@ Escape - Release pointer lock / Exit helicopter
     return this.playerState.position.clone();
   }
 
+  getCameraRotation(): THREE.Euler | undefined {
+    return this.camera?.rotation;
+  }
+
   syncPositionFromVR(position: THREE.Vector3): void {
     // Sync the player state position when VR takes control
     this.playerState.position.copy(position);

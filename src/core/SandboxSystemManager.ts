@@ -395,8 +395,8 @@ export class SandboxSystemManager {
         ammo: this.firstPersonWeapon?.getAmmoState()?.currentMagazine || 30,
         maxAmmo: this.firstPersonWeapon?.getAmmoState()?.reserveAmmo || 90,
         playerPosition: this.playerController?.getPosition(),
-        playerRotation: this.camera?.rotation,
-        zones: this.zoneManager?.getZones()
+        playerRotation: this.playerController?.getCameraRotation(),
+        zones: []  // TODO: Add getZones method to ZoneManager
       };
 
       this.vrHUDSystem.update(gameState);
